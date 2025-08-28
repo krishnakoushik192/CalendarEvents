@@ -8,7 +8,9 @@ const { height, width } = Dimensions.get('window');
 
 const HomeScreen = (props) => {
   useEffect(()=>{
-    getEvents();
+    getEvents().then(events=>{
+      console.log("Fetched events:", events);
+    });
   },[])
   return (
     <View style={styles.container}>
