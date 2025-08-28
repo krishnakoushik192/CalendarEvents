@@ -12,6 +12,7 @@ const HomeScreen = (props) => {
   const [markedDates, setMarkedDates] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [todayEvents, setTodayEvents] = useState(0);
+  const [calendarKey, setCalendarKey] = useState(0); // Add calendar key for forced re-render
 
   const fetchEvents = async () => {
     try {
@@ -63,55 +64,61 @@ const HomeScreen = (props) => {
   };
 
   const markEventDates = (eventsList) => {
-    const marked = {};
-    const today = new Date().toISOString().split('T')[0];
+    // Force a complete reset by clearing markedDates first
+    setMarkedDates({});
     
-    // Group events by date
-    const eventsByDate = {};
-    eventsList.forEach(event => {
-      let eventDate;
-      if (event.start?.dateTime) {
-        eventDate = event.start.dateTime.split('T')[0];
-      } else if (event.start?.date) {
-        eventDate = event.start.date;
-      }
+    // Use setTimeout to ensure the reset happens before setting new values
+    setTimeout(() => {
+      const marked = {};
+      const today = new Date().toISOString().split('T')[0];
       
-      if (eventDate) {
-        if (!eventsByDate[eventDate]) {
-          eventsByDate[eventDate] = 0;
+      console.log('Today\'s date:', today);
+      
+      // Group events by date
+      const eventsByDate = {};
+      eventsList.forEach(event => {
+        let eventDate;
+        if (event.start?.dateTime) {
+          eventDate = event.start.dateTime.split('T')[0];
+        } else if (event.start?.date) {
+          eventDate = event.start.date;
         }
-        eventsByDate[eventDate]++;
-      }
-    });
+        
+        if (eventDate) {
+          if (!eventsByDate[eventDate]) {
+            eventsByDate[eventDate] = 0;
+          }
+          eventsByDate[eventDate]++;
+        }
+      });
 
-    // Mark all dates with events
-    Object.keys(eventsByDate).forEach(date => {
-      const isToday = date === today;
-      marked[date] = {
-        marked: true,
-        dotColor: isToday ? '#ffffff' : '#4285F4', // White dot for today, blue for other days
-        activeOpacity: 0.7,
-      };
-    });
+      // Mark dates with events (excluding today)
+      Object.keys(eventsByDate).forEach(date => {
+        if (date !== today) {
+          marked[date] = {
+            marked: true,
+            dotColor: '#4285F4',
+            selected: false
+          };
+        }
+      });
 
-    // Always mark today (even if no events)
-    if (!marked[today]) {
+      // Mark today
+      const todayHasEvents = eventsByDate[today] && eventsByDate[today] > 0;
       marked[today] = {
         selected: true,
         selectedColor: '#34A853',
         selectedTextColor: '#ffffff',
+        ...(todayHasEvents && {
+          marked: true,
+          dotColor: '#ffffff'
+        })
       };
-    } else {
-      // If today has events, combine the marking with selection
-      marked[today] = {
-        ...marked[today],
-        selected: true,
-        selectedColor: '#34A853',
-        selectedTextColor: '#ffffff',
-      };
-    }
 
-    setMarkedDates(marked);
+      console.log('Setting new marked dates:', marked);
+      setMarkedDates(marked);
+      setCalendarKey(prev => prev + 1); // Force calendar re-render
+    }, 50); // Small delay to ensure reset happens first
   };
 
   const onDayPress = (day) => {
@@ -120,18 +127,6 @@ const HomeScreen = (props) => {
       date: day.dateString,
       dateString: day.dateString 
     });
-  };
-
-  const getEventsCount = (date) => {
-    return events.filter(event => {
-      let eventDate;
-      if (event.start?.dateTime) {
-        eventDate = event.start.dateTime.split('T')[0];
-      } else if (event.start?.date) {
-        eventDate = event.start.date;
-      }
-      return eventDate === date;
-    }).length;
   };
 
   const getDaysWithEvents = () => {
@@ -151,77 +146,100 @@ const HomeScreen = (props) => {
   };
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={['#4285F4']}
-          tintColor="#4285F4"
-          progressBackgroundColor="#1a1a1a"
-        />
-      }
-    >
-      <Header nav={props.navigation} />
-      
-      <View style={styles.calendarContainer}>
-        <Calendar
-          onDayPress={onDayPress}
-          markedDates={markedDates}
-          markingType={'simple'}
-          theme={{
-            backgroundColor: '#000000',
-            calendarBackground: '#000000',
-            textSectionTitleColor: '#ffffff',
-            textDayHeaderFontFamily: 'Lato-Regular',
-            selectedDayBackgroundColor: '#34A853',
-            selectedDayTextColor: '#ffffff',
-            todayTextColor: '#34A853',
-            dayTextColor: '#ffffff',
-            textDisabledColor: '#444444',
-            dotColor: '#4285F4',
-            selectedDotColor: '#ffffff',
-            arrowColor: '#ffffff',
-            disabledArrowColor: '#444444',
-            monthTextColor: '#ffffff',
-            indicatorColor: '#4285F4',
-            textMonthFontSize: 22,
-            textMonthFontFamily: 'Lato-Bold',
-            textDayFontFamily: 'Lato-Regular',
-            textDayFontSize: 18,
-            textDayHeaderFontSize: 14,
-            'stylesheet.calendar.header': {
-              week: {
-                marginTop: 5,
-                flexDirection: 'row',
-                justifyContent: 'space-around'
-              }
-            },
-            'stylesheet.day.basic': {
-              today: {
-                backgroundColor: '#34A853',
-                borderRadius: 16,
+    <View style={styles.container}>
+      <ScrollView 
+        style={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#4285F4']}
+            tintColor="#4285F4"
+            progressBackgroundColor="#1a1a1a"
+          />
+        }
+        contentContainerStyle={styles.scrollContent}
+      >
+        <Header nav={props.navigation} />
+        
+        <View style={styles.calendarContainer}>
+          <Calendar
+            key={calendarKey} // Use calendarKey instead of markedDates length
+            onDayPress={onDayPress}
+            markedDates={markedDates}
+            markingType={'simple'}
+            theme={{
+              backgroundColor: '#000000',
+              calendarBackground: '#000000',
+              textSectionTitleColor: '#ffffff',
+              textDayHeaderFontFamily: 'Lato-Regular',
+              selectedDayBackgroundColor: '#34A853',
+              selectedDayTextColor: '#ffffff',
+              todayTextColor: '#34A853',
+              dayTextColor: '#ffffff',
+              textDisabledColor: '#444444',
+              dotColor: '#4285F4',
+              selectedDotColor: '#ffffff',
+              arrowColor: '#ffffff',
+              disabledArrowColor: '#444444',
+              monthTextColor: '#ffffff',
+              indicatorColor: '#4285F4',
+              textMonthFontSize: 22,
+              textMonthFontFamily: 'Lato-Bold',
+              textDayFontFamily: 'Lato-Regular',
+              textDayFontSize: 18,
+              textDayHeaderFontSize: 14,
+              'stylesheet.calendar.header': {
+                week: {
+                  marginTop: 5,
+                  flexDirection: 'row',
+                  justifyContent: 'space-around'
+                }
               },
-              todayText: {
-                color: '#ffffff',
-                fontWeight: 'bold',
+              'stylesheet.day.basic': {
+                today: {
+                  backgroundColor: '#34A853',
+                  borderRadius: 16,
+                },
+                todayText: {
+                  color: '#ffffff',
+                  fontWeight: 'bold',
+                },
               },
-            },
-          }}
-          headerStyle={{ 
-            backgroundColor: '#000000', 
-            borderBottomWidth: 0,
-          }}
-          style={styles.calendar}
-          enableSwipeMonths={true}
-          hideExtraDays={true}
-          firstDay={1} // Start week on Monday
-        />
-      </View>
+            }}
+            headerStyle={{ 
+              backgroundColor: '#000000', 
+              borderBottomWidth: 0,
+            }}
+            style={styles.calendar}
+            enableSwipeMonths={true}
+            hideExtraDays={true}
+            firstDay={1} // Start week on Monday
+          />
+        </View>
 
-      {/* Stats Section */}
-      <View style={styles.statsContainer}>
+        {/* Legend */}
+        <View style={styles.legendContainer}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#ffffff' }]} />
+            <Text style={styles.legendText}>Today's Events</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#4285F4' }]} />
+            <Text style={styles.legendText}>Other Days</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#34A853' }]} />
+            <Text style={styles.legendText}>Today</Text>
+          </View>
+        </View>
+
+        {/* Spacer to push stats to bottom */}
+        <View style={styles.spacer} />
+      </ScrollView>
+
+      {/* Fixed Stats Section at Bottom */}
+      <View style={styles.fixedStatsContainer}>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>{events.length}</Text>
           <Text style={styles.statLabel}>Total Events</Text>
@@ -235,23 +253,7 @@ const HomeScreen = (props) => {
           <Text style={styles.statLabel}>Days with Events</Text>
         </View>
       </View>
-
-      {/* Legend */}
-      <View style={styles.legendContainer}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#ffffff' }]} />
-          <Text style={styles.legendText}>Today's Events</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#4285F4' }]} />
-          <Text style={styles.legendText}>Other Days</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#34A853' }]} />
-          <Text style={styles.legendText}>Today</Text>
-        </View>
-      </View>
-    </ScrollView>
+    </View>
   );
 };
 
@@ -259,6 +261,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 120, // Space for fixed bottom stats
   },
   calendarContainer: {
     paddingHorizontal: width * 0.02,
@@ -273,39 +282,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: width * 0.04,
-    paddingVertical: height * 0.02,
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#1a1a1a',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderLeftWidth: 3,
-    borderLeftColor: '#4285F4',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#4285F4',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#cccccc',
-    textAlign: 'center',
-    fontFamily: 'Lato-Regular',
-  },
   legendContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     paddingHorizontal: width * 0.04,
-    paddingBottom: height * 0.03,
+    paddingVertical: height * 0.02,
     gap: 20,
   },
   legendItem: {
@@ -322,6 +303,55 @@ const styles = StyleSheet.create({
     color: '#cccccc',
     fontSize: 12,
     fontFamily: 'Lato-Regular',
+  },
+  spacer: {
+    flex: 1,
+    minHeight: 20,
+  },
+  // Fixed Stats Container at Bottom
+  fixedStatsContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    backgroundColor: '#000000',
+    paddingHorizontal: width * 0.04,
+    paddingVertical: height * 0.015,
+    paddingBottom: height * 0.03, // Extra padding for safe area
+    justifyContent: 'space-between',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#333333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderLeftWidth: 3,
+    borderLeftColor: '#4285F4',
+    minHeight: 70,
+    justifyContent: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4285F4',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#cccccc',
+    textAlign: 'center',
+    fontFamily: 'Lato-Regular',
+    lineHeight: 14,
   },
 });
 
