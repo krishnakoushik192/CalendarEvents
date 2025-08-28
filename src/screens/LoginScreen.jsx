@@ -24,9 +24,12 @@ const LoginScreen = (props) => {
             // Create a Google credential with the token
             const googleCredential = GoogleAuthProvider.credential(idToken);
 
-            // Sign-in the user with the credential
-            console.log('Google Credential:', googleCredential);
-            await AsyncStorage.setItem('token', googleCredential.token);
+            const tokens = await GoogleSignin.getTokens();
+            console.log('Access Token:', tokens.accessToken);
+
+            // Store the access token (this is what you need for Calendar API)
+            await AsyncStorage.setItem('token', tokens.accessToken);
+            // await AsyncStorage.setItem('token', googleCredential.token);
             props.navigation.replace('Home');
             return signInWithCredential(getAuth(), googleCredential);
         } catch (error) {
