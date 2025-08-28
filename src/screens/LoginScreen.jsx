@@ -1,13 +1,38 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { GoogleAuthProvider, getAuth, signInWithCredential } from '@react-native-firebase/auth';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 const LoginScreen = (props) => {
 
     const handleLogin = async () => {
-        //    google sign in
-    }
+        // Check if your device supports Google Play
+        try {
+            await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+            console.log('Google Play Services are available');
+            // Get the users ID token
+            const signInResult = await GoogleSignin.signIn();
+            console.log('Google Sign-In Result:', signInResult.data.user);
+            await AsyncStorage.setItem('userInfo', JSON.stringify(signInResult.data.user));
+            const idToken = signInResult.data?.idToken;
+            if (!idToken) {
+                throw new Error('No ID token found');
+            }
+            // Create a Google credential with the token
+            const googleCredential = GoogleAuthProvider.credential(idToken);
+
+            // Sign-in the user with the credential
+            console.log('Google Credential:', googleCredential);
+            await AsyncStorage.setItem('token', googleCredential.token);
+            props.navigation.replace('Home');
+            return signInWithCredential(getAuth(), googleCredential);
+        } catch (error) {
+            console.error('Login Error:', error);
+        }
+    };
 
     return (
         <View style={styles.container}>

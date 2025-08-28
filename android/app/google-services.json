@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "886883572738-kmn9pjaofn83m845ae03c94nefd5ji8g.apps.googleusercontent.com",
+          "client_id": "886883572738-4ast3a0v1qumm0gikqtqrk86e87mts5q.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.calendarevents",
-            "certificate_hash": "d5d5cb15b315ffbcda63e053105fefa1f9221f47"
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
           }
         },
         {
