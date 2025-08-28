@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Header from '../components/Header';
 import { Calendar } from 'react-native-calendars';
+import { getEvents } from '../services/GoogleCalendarService';
 
 const { height, width } = Dimensions.get('window');
 
 const HomeScreen = (props) => {
   useEffect(()=>{
-    // getEvents();
+    getEvents();
   },[])
   return (
     <View style={styles.container}>

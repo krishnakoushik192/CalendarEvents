@@ -12,7 +12,7 @@ const Header = ({nav}) => {
 
     const getUserData = async () => {
         const user = await AsyncStorage.getItem('userInfo');
-        console.log('Fetched user data:', user);
+        // console.log('Fetched user data:', user);
         return user ? JSON.parse(user) : null;
     };
 
