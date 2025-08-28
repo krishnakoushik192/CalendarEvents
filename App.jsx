@@ -6,18 +6,22 @@
  */
 
 import { NewAppScreen } from '@react-native/new-app-screen';
+import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import {
   SafeAreaProvider,
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import StackNavigator from './src/navigation/StackNavigator';
 
 function App() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={ 'light-content'} />
-      <Text style={{ color: '#FFFFFF'}}>Calendar Events</Text>
+      <NavigationContainer>
+        <StackNavigator />
+      </NavigationContainer>
     </SafeAreaView>
   );
 }
