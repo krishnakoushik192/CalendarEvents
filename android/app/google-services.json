@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "886883572738",
+    "project_id": "calendarevent-c0be6",
+    "storage_bucket": "calendarevent-c0be6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:886883572738:android:d85082809c469123a55b1b",
+        "android_client_info": {
+          "package_name": "com.calendarevents"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "886883572738-kmn9pjaofn83m845ae03c94nefd5ji8g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.calendarevents",
+            "certificate_hash": "d5d5cb15b315ffbcda63e053105fefa1f9221f47"
+          }
+        },
+        {
+          "client_id": "886883572738-jnmgefnaeptk0ncrbj5d7kqvg1pbirl2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAiJ2_szfhJ90A5iY1avTnLNbf3J2nVatQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "886883572738-jnmgefnaeptk0ncrbj5d7kqvg1pbirl2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
