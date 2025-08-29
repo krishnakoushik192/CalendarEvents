@@ -241,9 +241,6 @@ const EventListScreen = ({ route, navigation }) => {
                     <Text style={styles.headerTitle}>Events</Text>
                     <Text style={styles.headerDate}>{formatDate(date)}</Text>
                 </View>
-                <TouchableOpacity onPress={handleCreateEvent} style={styles.addButton}>
-                    <MaterialIcons name="add" size={24} color="white" />
-                </TouchableOpacity>
             </View>
 
             {/* Events List */}
