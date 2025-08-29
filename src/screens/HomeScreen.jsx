@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, Alert, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Alert, RefreshControl, ScrollView, ProgressBarAndroid } from 'react-native';
 import Header from '../components/Header';
 import { Calendar } from 'react-native-calendars';
 import { getEvents } from '../services/GoogleCalendarService';
@@ -16,6 +16,7 @@ const HomeScreen = (props) => {
   const [todayEvents, setTodayEvents] = useState(0);
   const [calendarKey, setCalendarKey] = useState(0); // Add calendar key for forced re-render
   const [showTokenExpiredModal, setShowTokenExpiredModal] = useState(false);
+  const [eventLoading, setEventLoading] = useState(false);
 
   const authManager = AuthManager.getInstance();
 
@@ -34,6 +35,7 @@ const HomeScreen = (props) => {
 
   const fetchEvents = async () => {
     try {
+      setEventLoading(true);
       const fetchedEvents = await getEvents();
       console.log("Fetched events count:", fetchedEvents.length);
       setEvents(fetchedEvents);
@@ -42,10 +44,12 @@ const HomeScreen = (props) => {
     } catch (error) {
       console.error('Error fetching events:', error);
       // Don't show alert for auth errors as they're handled by AuthManager
-      if (!error.message.includes('Authentication failed') && 
-          !error.message.includes('Token refresh failed')) {
+      if (!error.message.includes('Authentication failed') &&
+        !error.message.includes('Token refresh failed')) {
         Alert.alert('Error', 'Failed to fetch events');
       }
+    } finally {
+      setEventLoading(false);
     }
   };
 
@@ -79,14 +83,14 @@ const HomeScreen = (props) => {
   const markEventDates = (eventsList) => {
     // Force a complete reset by clearing markedDates first
     setMarkedDates({});
-    
+
     // Use setTimeout to ensure the reset happens before setting new values
     setTimeout(() => {
       const marked = {};
       const today = new Date().toISOString().split('T')[0];
-      
+
       console.log('Today\'s date:', today);
-      
+
       // Group events by date
       const eventsByDate = {};
       eventsList.forEach(event => {
@@ -96,7 +100,7 @@ const HomeScreen = (props) => {
         } else if (event.start?.date) {
           eventDate = event.start.date;
         }
-        
+
         if (eventDate) {
           if (!eventsByDate[eventDate]) {
             eventsByDate[eventDate] = 0;
@@ -136,9 +140,9 @@ const HomeScreen = (props) => {
 
   const onDayPress = (day) => {
     console.log('selected day', day);
-    props.navigation.navigate("EventList", { 
+    props.navigation.navigate("EventList", {
       date: day.dateString,
-      dateString: day.dateString 
+      dateString: day.dateString
     });
   };
 
@@ -164,7 +168,7 @@ const HomeScreen = (props) => {
 
   return (
     <View style={styles.container}>
-      <ScrollView 
+      <ScrollView
         style={styles.scrollContainer}
         refreshControl={
           <RefreshControl
@@ -178,7 +182,13 @@ const HomeScreen = (props) => {
         contentContainerStyle={styles.scrollContent}
       >
         <Header nav={props.navigation} />
-        
+        <ProgressBarAndroid
+          styleAttr="Horizontal"
+          indeterminate={eventLoading}
+          color="#4285F4"
+          style={{ width: '100%', height: 20 }}
+        />
+
         <View style={styles.calendarContainer}>
           <Calendar
             key={calendarKey} // Use calendarKey instead of markedDates length
@@ -215,7 +225,7 @@ const HomeScreen = (props) => {
               },
               'stylesheet.day.basic': {
                 today: {
-                  backgroundColor: '#34A853',
+                  backgroundColor: '#4285F4',
                   borderRadius: 16,
                 },
                 todayText: {
@@ -224,8 +234,8 @@ const HomeScreen = (props) => {
                 },
               },
             }}
-            headerStyle={{ 
-              backgroundColor: '#000000', 
+            headerStyle={{
+              backgroundColor: '#000000',
               borderBottomWidth: 0,
             }}
             style={styles.calendar}
@@ -264,8 +274,8 @@ const HomeScreen = (props) => {
       </View>
 
       {/* Token Expired Modal */}
-      <TokenExpiredModal 
-        visible={showTokenExpiredModal} 
+      <TokenExpiredModal
+        visible={showTokenExpiredModal}
         onReLogin={handleReLogin}
       />
     </View>
