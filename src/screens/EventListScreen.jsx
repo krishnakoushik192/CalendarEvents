@@ -273,6 +273,7 @@ const styles = StyleSheet.create({
         color: 'white',
         marginTop: 12,
         fontSize: 16,
+        fontFamily: 'Lato-Regular',
     },
     listContainer: {
         paddingHorizontal: width * 0.04,
@@ -300,6 +301,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         flex: 1,
         marginRight: 12,
+        fontFamily: 'Lato-Regular',
     },
     eventActions: {
         flexDirection: 'row',
@@ -319,6 +321,7 @@ const styles = StyleSheet.create({
     eventTime: {
         color: '#cccccc',
         fontSize: 14,
+        fontFamily: 'Lato-Regular',
     },
     locationContainer: {
         flexDirection: 'row',
@@ -329,12 +332,14 @@ const styles = StyleSheet.create({
         color: '#cccccc',
         fontSize: 14,
         flex: 1,
+        fontFamily: 'Lato-Regular',
     },
     eventDescription: {
         color: '#999999',
         fontSize: 14,
         lineHeight: 18,
         marginTop: 4,
+        fontFamily: 'Lato-Regular',
     },
     emptyState: {
         flex: 1,
@@ -347,6 +352,7 @@ const styles = StyleSheet.create({
         fontSize: 18,
         marginTop: 16,
         marginBottom: 24,
+        fontFamily: 'Lato-Regular',
     },
     createButton: {
         backgroundColor: '#4285F4',
@@ -358,6 +364,7 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 16,
         fontWeight: '500',
+        fontFamily: 'Lato-Regular',
     },
     fab: {
         position: 'absolute',

@@ -343,6 +343,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         flex: 1,
         textAlign: 'center',
+        fontFamily: 'Lato-Regular',
     },
     saveButton: {
         backgroundColor: '#4285F4',
@@ -360,7 +361,7 @@ const styles = StyleSheet.create({
     saveButtonText: {
         color: 'white',
         fontSize: Math.min(16, width * 0.04),
-        fontWeight: '600',
+        fontFamily: 'Lato-Bold',
     },
     content: {
         flex: 1,
@@ -374,8 +375,8 @@ const styles = StyleSheet.create({
     label: {
         color: 'white',
         fontSize: Math.min(18, width * 0.045),
-        fontWeight: '500',
         marginBottom: height * 0.01,
+        fontFamily: 'Lato-Bold',
     },
     input: {
         backgroundColor: '#1a1a1a',
@@ -387,6 +388,7 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: Math.min(16, width * 0.04),
         minHeight: height * 0.06,
+        fontFamily: 'Lato-Regular',
     },
     textArea: {
         minHeight: height * 0.12,
@@ -409,6 +411,7 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: Math.min(16, width * 0.04),
         flex: 1,
+        fontFamily: 'Lato-Regular',
     },
     timeContainer: {
         flexDirection: 'row',
@@ -431,12 +434,13 @@ const styles = StyleSheet.create({
     timeButtonText: {
         color: 'white',
         fontSize: Math.min(16, width * 0.04),
-        fontWeight: '500',
+        fontFamily: 'Lato-Bold',
         textAlign: 'center',
     },
     timeLabel: {
         color: '#666',
         fontSize: Math.min(12, width * 0.03),
+        fontFamily: 'Lato-Regular',
     },
     timeSeparator: {
         paddingHorizontal: width * 0.02,
@@ -446,7 +450,7 @@ const styles = StyleSheet.create({
     timeSeparatorText: {
         color: '#666',
         fontSize: Math.min(14, width * 0.035),
-        fontWeight: '500',
+        fontFamily: 'Lato-Bold',
     },
     timePickerOverlay: {
         flex: 1,
@@ -479,7 +483,7 @@ const styles = StyleSheet.create({
     timePickerTitle: {
         color: 'white',
         fontSize: Math.min(20, width * 0.05),
-        fontWeight: '600',
+        fontFamily: 'Lato-Bold',
         flex: 1,
     },
     closeTimePickerButton: {
@@ -510,6 +514,7 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: Math.min(18, width * 0.045),
         textAlign: 'center',
+        fontFamily: 'Lato-Regular',
     },
     selectedTimeOptionText: {
         color: 'white',
