@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, Alert, RefreshControl, ScrollView, ProgressBarAndroid } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Alert, RefreshControl, ScrollView, ProgressBarAndroid, Pressable } from 'react-native';
 import Header from '../components/Header';
 import { Calendar } from 'react-native-calendars';
 import { getEvents } from '../services/GoogleCalendarService';
@@ -14,21 +14,20 @@ const HomeScreen = (props) => {
   const [markedDates, setMarkedDates] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [todayEvents, setTodayEvents] = useState(0);
-  const [calendarKey, setCalendarKey] = useState(0); // Add calendar key for forced re-render
+  const [calendarKey, setCalendarKey] = useState(0);
   const [showTokenExpiredModal, setShowTokenExpiredModal] = useState(false);
   const [eventLoading, setEventLoading] = useState(false);
+  const [eventsByDate, setEventsByDate] = useState({});
 
   const authManager = AuthManager.getInstance();
 
   useEffect(() => {
-    // Set up token expiry callback
     authManager.setTokenExpiredCallback(() => {
       console.log('Token expired callback triggered in HomeScreen');
       setShowTokenExpiredModal(true);
     });
 
     return () => {
-      // Cleanup callback when component unmounts
       authManager.setTokenExpiredCallback(null);
     };
   }, []);
@@ -39,11 +38,30 @@ const HomeScreen = (props) => {
       const fetchedEvents = await getEvents();
       console.log("Fetched events count:", fetchedEvents.length);
       setEvents(fetchedEvents);
-      markEventDates(fetchedEvents);
+      
+      // Group events by date
+      const grouped = {};
+      fetchedEvents.forEach(event => {
+        let eventDate;
+        if (event.start?.dateTime) {
+          eventDate = event.start.dateTime.split('T')[0];
+        } else if (event.start?.date) {
+          eventDate = event.start.date;
+        }
+
+        if (eventDate) {
+          if (!grouped[eventDate]) {
+            grouped[eventDate] = [];
+          }
+          grouped[eventDate].push(event);
+        }
+      });
+      
+      setEventsByDate(grouped);
+      markEventDates(fetchedEvents, grouped);
       calculateTodayEvents(fetchedEvents);
     } catch (error) {
       console.error('Error fetching events:', error);
-      // Don't show alert for auth errors as they're handled by AuthManager
       if (!error.message.includes('Authentication failed') &&
         !error.message.includes('Token refresh failed')) {
         Alert.alert('Error', 'Failed to fetch events');
@@ -59,7 +77,6 @@ const HomeScreen = (props) => {
     setRefreshing(false);
   }, []);
 
-  // Refresh events when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       fetchEvents();
@@ -80,65 +97,64 @@ const HomeScreen = (props) => {
     setTodayEvents(count);
   };
 
-  const markEventDates = (eventsList) => {
-    // Force a complete reset by clearing markedDates first
+  const markEventDates = (eventsList, grouped) => {
     setMarkedDates({});
 
-    // Use setTimeout to ensure the reset happens before setting new values
     setTimeout(() => {
       const marked = {};
       const today = new Date().toISOString().split('T')[0];
 
       console.log('Today\'s date:', today);
 
-      // Group events by date
-      const eventsByDate = {};
-      eventsList.forEach(event => {
-        let eventDate;
-        if (event.start?.dateTime) {
-          eventDate = event.start.dateTime.split('T')[0];
-        } else if (event.start?.date) {
-          eventDate = event.start.date;
-        }
-
-        if (eventDate) {
-          if (!eventsByDate[eventDate]) {
-            eventsByDate[eventDate] = 0;
+      // Mark dates with events
+      Object.keys(grouped).forEach(date => {
+        const dateEvents = grouped[date];
+        const isToday = date === today;
+        
+        marked[date] = {
+          selected: isToday,
+          selectedColor: isToday ? '#4285F4' : undefined,
+          selectedTextColor: isToday ? '#ffffff' : undefined,
+          customStyles: {
+            container: {
+              backgroundColor: isToday ? '#4285F4' : 'transparent',
+              borderRadius: 8,
+            },
+            text: {
+              color: isToday ? '#ffffff' : '#ffffff',
+              fontSize: 16,
+              fontWeight: isToday ? 'bold' : 'normal',
+            }
           }
-          eventsByDate[eventDate]++;
-        }
+        };
       });
 
-      // Mark dates with events (excluding today)
-      Object.keys(eventsByDate).forEach(date => {
-        if (date !== today) {
-          marked[date] = {
-            marked: true,
-            dotColor: '#4285F4',
-            selected: false
-          };
-        }
-      });
-
-      // Mark today
-      const todayHasEvents = eventsByDate[today] && eventsByDate[today] > 0;
-      marked[today] = {
-        selected: true,
-        selectedColor: '#4285F4',
-        selectedTextColor: '#ffffff',
-        ...(todayHasEvents && {
-          marked: true,
-          dotColor: '#ffffff'
-        })
-      };
+      // Always mark today even if no events
+      if (!marked[today]) {
+        marked[today] = {
+          selected: true,
+          selectedColor: '#4285F4',
+          selectedTextColor: '#ffffff',
+          customStyles: {
+            container: {
+              backgroundColor: '#4285F4',
+              borderRadius: 8,
+            },
+            text: {
+              color: '#ffffff',
+              fontSize: 16,
+              fontWeight: 'bold',
+            }
+          }
+        };
+      }
 
       console.log('Setting new marked dates:', marked);
       setMarkedDates(marked);
-      setCalendarKey(prev => prev + 1); // Force calendar re-render
-    }, 50); // Small delay to ensure reset happens first
+      setCalendarKey(prev => prev + 1);
+    }, 50);
   };
-
-  const onDayPress = (day) => {
+   const onDayPress = (day) => {
     console.log('selected day', day);
     props.navigation.navigate("EventList", {
       date: day.dateString,
@@ -146,9 +162,64 @@ const HomeScreen = (props) => {
     });
   };
 
+  // Custom day component to show events
+  const DayComponent = ({ date, marking }) => {
+    const dateString = date.dateString;
+    const dayEvents = eventsByDate[dateString] || [];
+    const isToday = dateString === new Date().toISOString().split('T')[0];
+    const hasEvents = dayEvents.length > 0;
+
+    return (
+      <Pressable onPress={() => onDayPress(date)}>      
+      <View style={styles.dayContainer}>
+        <View style={[
+          styles.dayHeader,
+          isToday && styles.todayHeader
+        ]}>
+          <Text style={[
+            styles.dayText,
+            isToday && styles.todayText
+          ]}>
+            {date.day}
+          </Text>
+        </View>
+        
+        {hasEvents && (
+          <View style={styles.eventContainer}>
+            {dayEvents.slice(0, 2).map((event, index) => (
+              <View 
+                key={event.id} 
+                style={[
+                  styles.eventBox,
+                  { backgroundColor: isToday ? '#1976D2' : '#2E7D32' }
+                ]}
+              >
+                <Text style={styles.eventText} numberOfLines={1}>
+                  {event.summary || 'Untitled'}
+                </Text>
+              </View>
+            ))}
+            {dayEvents.length > 2 && (
+              <View style={[
+                styles.moreEventsBox,
+                { backgroundColor: isToday ? '#0D47A1' : '#1B5E20' }
+              ]}>
+                <Text style={styles.moreEventsText}>
+                  +{dayEvents.length - 2} more
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+      </Pressable>
+    );
+  };
+
+ 
+
   const handleReLogin = async () => {
     try {
-      // Logout and navigate to login screen
       await authManager.logout();
       setShowTokenExpiredModal(false);
       props.navigation.reset({
@@ -157,7 +228,6 @@ const HomeScreen = (props) => {
       });
     } catch (error) {
       console.error('Error during re-login process:', error);
-      // Still navigate to login even if logout fails
       setShowTokenExpiredModal(false);
       props.navigation.reset({
         index: 0,
@@ -191,30 +261,21 @@ const HomeScreen = (props) => {
 
         <View style={styles.calendarContainer}>
           <Calendar
-            key={calendarKey} // Use calendarKey instead of markedDates length
+            key={calendarKey}
             onDayPress={onDayPress}
             markedDates={markedDates}
-            markingType={'simple'}
+            dayComponent={DayComponent}
             theme={{
               backgroundColor: '#000000',
               calendarBackground: '#000000',
               textSectionTitleColor: '#ffffff',
               textDayHeaderFontFamily: 'Lato-Regular',
-              selectedDayBackgroundColor: '#4285F4',
-              selectedDayTextColor: '#ffffff',
-              todayTextColor: '#4285F4',
-              dayTextColor: '#ffffff',
-              textDisabledColor: '#444444',
-              dotColor: '#4285F4',
-              selectedDotColor: '#ffffff',
               arrowColor: '#ffffff',
               disabledArrowColor: '#444444',
               monthTextColor: '#ffffff',
               indicatorColor: '#4285F4',
               textMonthFontSize: 22,
               textMonthFontFamily: 'Lato-Bold',
-              textDayFontFamily: 'Lato-Regular',
-              textDayFontSize: 18,
               textDayHeaderFontSize: 14,
               'stylesheet.calendar.header': {
                 week: {
@@ -222,16 +283,6 @@ const HomeScreen = (props) => {
                   flexDirection: 'row',
                   justifyContent: 'space-around'
                 }
-              },
-              'stylesheet.day.basic': {
-                today: {
-                  backgroundColor: '#4285F4',
-                  borderRadius: 16,
-                },
-                todayText: {
-                  color: '#ffffff',
-                  fontWeight: 'bold',
-                },
               },
             }}
             headerStyle={{
@@ -241,23 +292,22 @@ const HomeScreen = (props) => {
             style={styles.calendar}
             enableSwipeMonths={true}
             hideExtraDays={true}
-            firstDay={1} // Start week on Monday
+            firstDay={1}
           />
         </View>
 
         {/* Legend */}
         <View style={styles.legendContainer}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#ffffff' }]} />
+            <View style={[styles.legendDot, { backgroundColor: '#1976D2' }]} />
             <Text style={styles.legendText}>Today's Events</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#4285F4' }]} />
-            <Text style={styles.legendText}>Other Days</Text>
+            <View style={[styles.legendDot, { backgroundColor: '#2E7D32' }]} />
+            <Text style={styles.legendText}>Other Events</Text>
           </View>
         </View>
 
-        {/* Spacer to push stats to bottom */}
         <View style={styles.spacer} />
       </ScrollView>
 
@@ -273,7 +323,6 @@ const HomeScreen = (props) => {
         </View>
       </View>
 
-      {/* Token Expired Modal */}
       <TokenExpiredModal
         visible={showTokenExpiredModal}
         onReLogin={handleReLogin}
@@ -292,7 +341,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 120, // Space for fixed bottom stats
+    paddingBottom: 120,
   },
   calendarContainer: {
     paddingHorizontal: width * 0.02,
@@ -306,6 +355,63 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+  },
+  // Custom day component styles
+  dayContainer: {
+    width: width * 0.13,
+    height: 80,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  dayHeader: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  todayHeader: {
+    backgroundColor: '#4285F4',
+  },
+  dayText: {
+    fontSize: 16,
+    color: '#ffffff',
+    fontFamily: 'Lato-Regular',
+  },
+  todayText: {
+    color: '#ffffff',
+    fontFamily: 'Lato-Bold',
+  },
+  eventContainer: {
+    width: '100%',
+    paddingHorizontal: 1,
+    marginTop: 2,
+    gap: 1,
+  },
+  eventBox: {
+    borderRadius: 3,
+    paddingHorizontal: 2,
+    paddingVertical: 1,
+    marginVertical: 0.5,
+  },
+  eventText: {
+    fontSize: 8,
+    color: '#ffffff',
+    fontFamily: 'Lato-Regular',
+    textAlign: 'center',
+  },
+  moreEventsBox: {
+    borderRadius: 3,
+    paddingHorizontal: 2,
+    paddingVertical: 1,
+    marginVertical: 0.5,
+  },
+  moreEventsText: {
+    fontSize: 7,
+    color: '#ffffff',
+    fontFamily: 'Lato-Regular',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   legendContainer: {
     flexDirection: 'row',
@@ -333,7 +439,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 20,
   },
-  // Fixed Stats Container at Bottom
   fixedStatsContainer: {
     position: 'absolute',
     bottom: 0,
@@ -343,7 +448,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     paddingHorizontal: width * 0.04,
     paddingVertical: height * 0.015,
-    paddingBottom: height * 0.03, // Extra padding for safe area
+    paddingBottom: height * 0.03,
     justifyContent: 'space-between',
     gap: 8,
     borderTopWidth: 1,
