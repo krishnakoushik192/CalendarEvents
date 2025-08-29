@@ -5,6 +5,7 @@ import {
 } from 'react-native-safe-area-context';
 import StackNavigator from './src/navigation/StackNavigator';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 function App() {
   GoogleSignin.configure({
@@ -14,9 +15,11 @@ function App() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={'light-content'} />
-      <NavigationContainer>
-        <StackNavigator />
-      </NavigationContainer>
+      <GestureHandlerRootView>
+        <NavigationContainer>
+          <StackNavigator />
+        </NavigationContainer>
+      </GestureHandlerRootView>
     </SafeAreaView>
   );
 }

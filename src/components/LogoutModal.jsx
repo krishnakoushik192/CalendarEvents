@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, Dimensions, Pressable } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, Dimensions, Pressable, ActivityIndicator } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -9,29 +9,41 @@ const LogoutModal = (props) => {
       transparent={true}
       animationType="fade"
       visible={props.visible}
-      onRequestClose={props.onCancel}
+      onRequestClose={props.loading ? null : props.onCancel} // Prevent closing while loading
     >
       <View style={styles.overlay}>
-        <Pressable style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }} onPress={props.onCancel}>
+        <Pressable 
+          style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }} 
+          onPress={props.loading ? null : props.onCancel} // Disable tap to close while loading
+        >
           <View style={styles.modalContainer}>
-            <Text style={styles.title}>Confirm Logout</Text>
-            <Text style={styles.message}>Are you sure you want to log out?</Text>
-            
+            <Text style={styles.title}>{props.title}</Text>
+            <Text style={styles.message}>{props.message}</Text>
+
             <View style={styles.buttonContainer}>
               <TouchableOpacity 
-                style={styles.logoutButton} 
-                onPress={props.onConfirm}
-                activeOpacity={0.8}
+                style={[styles.logoutButton, props.loading && styles.disabledButton]} 
+                onPress={props.loading ? null : props.onConfirm}
+                activeOpacity={props.loading ? 1 : 0.8}
+                disabled={props.loading}
               >
-                <Text style={styles.logoutButtonText}>Yes, Logout</Text>
+                {props.loading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={[styles.logoutButtonText, { marginLeft: 8 }]}>Deleting...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.logoutButtonText}>Yes, {props.title}</Text>
+                )}
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={styles.cancelButton} 
-                onPress={props.onCancel}
-                activeOpacity={0.8}
+                style={[styles.cancelButton, props.loading && styles.disabledButton]} 
+                onPress={props.loading ? null : props.onCancel}
+                activeOpacity={props.loading ? 1 : 0.8}
+                disabled={props.loading}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={[styles.cancelButtonText, props.loading && styles.disabledText]}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -90,6 +102,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 50,
   },
   logoutButtonText: {
     color: '#ffffff',
@@ -110,6 +123,17 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 16,
     fontWeight: '500',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  disabledText: {
+    color: '#999999',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

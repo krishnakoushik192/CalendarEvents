@@ -92,6 +92,8 @@ const UserProfileModal = ({ visible, onCancel, onLogout }) => {
                             visible={logoutModalVisible}
                             onConfirm={onLogout}
                             onCancel={() => setLogoutModalVisible(false)}
+                            title="Logout"
+                            message="Are you sure you want to logout?"
                         />
                     </View>
                 </TouchableOpacity>

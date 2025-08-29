@@ -13,6 +13,8 @@ import {
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { getEventsForDate, deleteEvent } from '../services/GoogleCalendarService';
 import EventModal from '../components/EventModal';
+import LogoutModal from '../components/LogoutModal';
+import { Swipeable } from 'react-native-gesture-handler';
 
 const { width, height } = Dimensions.get('window');
 
@@ -24,6 +26,9 @@ const EventListScreen = ({ route, navigation }) => {
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [modalType, setModalType] = useState('create'); // 'create' or 'edit'
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [eventToDelete, setEventToDelete] = useState(null);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
     useEffect(() => {
         fetchEvents();
@@ -60,39 +65,51 @@ const EventListScreen = ({ route, navigation }) => {
         setModalVisible(true);
     };
 
-    const handleDeleteEvent = (eventId, eventTitle) => {
-        Alert.alert(
-            'Delete Event',
-            `Are you sure you want to delete "${eventTitle}"?`,
-            [
-                {
-                    text: 'Cancel',
-                    style: 'cancel',
-                },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await deleteEvent(eventId);
-                            await fetchEvents(); // Refresh the list
-                            Alert.alert('Success', 'Event deleted successfully');
-                        } catch (error) {
-                            console.error('Error deleting event:', error);
-                            Alert.alert('Error', 'Failed to delete event');
-                        }
-                    },
-                },
-            ]
-        );
+    const handleDeleteEvent = (event) => {
+        setEventToDelete(event);
+        setDeleteModalVisible(true);
+    };
+
+    const confirmDeleteEvent = async () => {
+        if (!eventToDelete) return;
+        
+        try {
+            setDeleteLoading(true);
+            
+            await deleteEvent(eventToDelete.id);
+            await fetchEvents(); // Refresh the list
+            
+            // Close modal and reset states
+            setDeleteModalVisible(false);
+            setEventToDelete(null);
+            setDeleteLoading(false);
+            
+            // Show success alert after modal is closed
+            setTimeout(() => {
+                Alert.alert('Success', 'Event deleted successfully');
+            }, 300);
+        } catch (error) {
+            console.error('Error deleting event:', error);
+            setDeleteLoading(false);
+            
+            // Show error alert but keep modal open so user can try again
+            Alert.alert('Error', 'Failed to delete event');
+        }
+    };
+
+    const cancelDeleteEvent = () => {
+        if (deleteLoading) return; // Prevent closing while deleting
+        setDeleteModalVisible(false);
+        setEventToDelete(null);
+        setDeleteLoading(false);
     };
 
     const formatDate = (dateString) => {
-        const options = { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+        const options = {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
         };
         return new Date(dateString).toLocaleDateString('en-US', options);
     };
@@ -106,54 +123,55 @@ const EventListScreen = ({ route, navigation }) => {
         });
     };
 
+    const renderRightActions = (item) => (
+        <View style={styles.rightActions}>
+            <TouchableOpacity onPress={() => handleEditEvent(item)} style={styles.actionEditButton}>
+                <MaterialIcons name="edit" size={24} color="#ffffff" />
+                <Text style={styles.actionButtonText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleDeleteEvent(item)} style={styles.actionDeleteButton}>
+                <MaterialIcons name="delete" size={24} color="#ffffff" />
+                <Text style={styles.actionButtonText}>Delete</Text>
+            </TouchableOpacity>
+        </View>
+    );
+
     const renderEventItem = ({ item }) => (
-        <View style={styles.eventItem}>
-            <View style={styles.eventContent}>
-                <View style={styles.eventHeader}>
-                    <Text style={styles.eventTitle} numberOfLines={1}>
-                        {item.summary || 'Untitled Event'}
-                    </Text>
-                    <View style={styles.eventActions}>
-                        <TouchableOpacity
-                            onPress={() => handleEditEvent(item)}
-                            style={styles.actionButton}
-                        >
-                            <MaterialIcons name="edit" size={20} color="#4285F4" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => handleDeleteEvent(item.id, item.summary)}
-                            style={styles.actionButton}
-                        >
-                            <MaterialIcons name="delete" size={20} color="#EA4335" />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-                
-                <View style={styles.eventDetails}>
-                    <View style={styles.timeContainer}>
-                        <MaterialIcons name="access-time" size={16} color="#666" />
-                        <Text style={styles.eventTime}>
-                            {formatTime(item.start?.dateTime)} - {formatTime(item.end?.dateTime)}
+        <Swipeable renderRightActions={() => renderRightActions(item)}>
+            <View style={styles.eventItem}>
+                <View style={styles.eventContent}>
+                    <View style={styles.eventHeader}>
+                        <Text style={styles.eventTitle} numberOfLines={1}>
+                            {item.summary || 'Untitled Event'}
                         </Text>
                     </View>
-                    
-                    {item.location && (
-                        <View style={styles.locationContainer}>
-                            <MaterialIcons name="location-on" size={16} color="#666" />
-                            <Text style={styles.eventLocation} numberOfLines={1}>
-                                {item.location}
+
+                    <View style={styles.eventDetails}>
+                        <View style={styles.timeContainer}>
+                            <MaterialIcons name="access-time" size={16} color="#666" />
+                            <Text style={styles.eventTime}>
+                                {formatTime(item.start?.dateTime)} - {formatTime(item.end?.dateTime)}
                             </Text>
                         </View>
-                    )}
-                    
-                    {item.description && (
-                        <Text style={styles.eventDescription} numberOfLines={2}>
-                            {item.description}
-                        </Text>
-                    )}
+
+                        {item.location && (
+                            <View style={styles.locationContainer}>
+                                <MaterialIcons name="location-on" size={16} color="#666" />
+                                <Text style={styles.eventLocation} numberOfLines={1}>
+                                    {item.location}
+                                </Text>
+                            </View>
+                        )}
+
+                        {item.description && (
+                            <Text style={styles.eventDescription} numberOfLines={2}>
+                                {item.description}
+                            </Text>
+                        )}
+                    </View>
                 </View>
             </View>
-        </View>
+        </Swipeable>
     );
 
     const renderEmptyState = () => (
@@ -170,8 +188,8 @@ const EventListScreen = ({ route, navigation }) => {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity 
-                    onPress={() => navigation.goBack()} 
+                <TouchableOpacity
+                    onPress={() => navigation.goBack()}
                     style={styles.backButton}
                 >
                     <MaterialIcons name="arrow-back" size={24} color="white" />
@@ -223,6 +241,16 @@ const EventListScreen = ({ route, navigation }) => {
                 date={date}
                 onClose={() => setModalVisible(false)}
                 onEventUpdated={fetchEvents}
+            />
+
+            {/* Delete Confirmation Modal */}
+            <LogoutModal
+                visible={deleteModalVisible}
+                loading={deleteLoading}
+                onConfirm={confirmDeleteEvent}
+                onCancel={cancelDeleteEvent}
+                title="Delete Event"
+                message={`Are you sure you want to delete "${eventToDelete?.summary || 'this event'}"?`}
             />
         </View>
     );
@@ -303,13 +331,6 @@ const styles = StyleSheet.create({
         marginRight: 12,
         fontFamily: 'Lato-Regular',
     },
-    eventActions: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    actionButton: {
-        padding: 4,
-    },
     eventDetails: {
         gap: 6,
     },
@@ -381,6 +402,33 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 8,
+    },
+    rightActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderTopRightRadius: 12,
+        borderBottomRightRadius: 12,
+        marginLeft: 12,
+    },
+    actionDeleteButton: {
+        backgroundColor: '#EA4335',
+        flexDirection: 'row',
+        padding: 8,
+        borderRadius: 12,
+        margin: 4,
+    },
+    actionButtonText: {
+        color: '#ffffff',
+        fontSize: 14,
+        fontFamily: 'Lato-Regular',
+    },
+    actionEditButton: {
+        backgroundColor: '#4285F4',
+        flexDirection: 'row',
+        padding: 8,
+        borderRadius: 12,
+        margin: 4,
     },
 });
 
