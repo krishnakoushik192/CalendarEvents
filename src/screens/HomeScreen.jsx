@@ -38,7 +38,7 @@ const HomeScreen = (props) => {
       const fetchedEvents = await getEvents();
       console.log("Fetched events count:", fetchedEvents.length);
       setEvents(fetchedEvents);
-      
+
       // Group events by date
       const grouped = {};
       fetchedEvents.forEach(event => {
@@ -56,7 +56,7 @@ const HomeScreen = (props) => {
           grouped[eventDate].push(event);
         }
       });
-      
+
       setEventsByDate(grouped);
       markEventDates(fetchedEvents, grouped);
       calculateTodayEvents(fetchedEvents);
@@ -110,7 +110,7 @@ const HomeScreen = (props) => {
       Object.keys(grouped).forEach(date => {
         const dateEvents = grouped[date];
         const isToday = date === today;
-        
+
         marked[date] = {
           selected: isToday,
           selectedColor: isToday ? '#4285F4' : undefined,
@@ -154,7 +154,7 @@ const HomeScreen = (props) => {
       setCalendarKey(prev => prev + 1);
     }, 50);
   };
-   const onDayPress = (day) => {
+  const onDayPress = (day) => {
     console.log('selected day', day);
     props.navigation.navigate("EventList", {
       date: day.dateString,
@@ -170,53 +170,53 @@ const HomeScreen = (props) => {
     const hasEvents = dayEvents.length > 0;
 
     return (
-      <Pressable onPress={() => onDayPress(date)}>      
-      <View style={styles.dayContainer}>
-        <View style={[
-          styles.dayHeader,
-          isToday && styles.todayHeader
-        ]}>
-          <Text style={[
-            styles.dayText,
-            isToday && styles.todayText
+      <Pressable onPress={() => onDayPress(date)}>
+        <View style={styles.dayContainer}>
+          <View style={[
+            styles.dayHeader,
+            isToday && styles.todayHeader
           ]}>
-            {date.day}
-          </Text>
-        </View>
-        
-        {hasEvents && (
-          <View style={styles.eventContainer}>
-            {dayEvents.slice(0, 2).map((event, index) => (
-              <View 
-                key={event.id} 
-                style={[
-                  styles.eventBox,
-                  { backgroundColor: isToday ? '#1976D2' : '#2E7D32' }
-                ]}
-              >
-                <Text style={styles.eventText} numberOfLines={1}>
-                  {event.summary || 'Untitled'}
-                </Text>
-              </View>
-            ))}
-            {dayEvents.length > 2 && (
-              <View style={[
-                styles.moreEventsBox,
-                { backgroundColor: isToday ? '#0D47A1' : '#1B5E20' }
-              ]}>
-                <Text style={styles.moreEventsText}>
-                  +{dayEvents.length - 2} more
-                </Text>
-              </View>
-            )}
+            <Text style={[
+              styles.dayText,
+              isToday && styles.todayText
+            ]}>
+              {date.day}
+            </Text>
           </View>
-        )}
-      </View>
+
+          {hasEvents && (
+            <View style={styles.eventContainer}>
+              {dayEvents.slice(0, 2).map((event, index) => (
+                <View
+                  key={event.id}
+                  style={[
+                    styles.eventBox,
+                    { backgroundColor: isToday ? '#1976D2' : '#2E7D32' }
+                  ]}
+                >
+                  <Text style={styles.eventText} numberOfLines={1}>
+                    {event.summary || 'Untitled'}
+                  </Text>
+                </View>
+              ))}
+              {dayEvents.length > 2 && (
+                <View style={[
+                  styles.moreEventsBox,
+                  { backgroundColor: isToday ? '#0D47A1' : '#1B5E20' }
+                ]}>
+                  <Text style={styles.moreEventsText}>
+                    +{dayEvents.length - 2} more
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
       </Pressable>
     );
   };
 
- 
+
 
   const handleReLogin = async () => {
     try {
