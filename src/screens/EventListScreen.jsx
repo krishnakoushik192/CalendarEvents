@@ -14,7 +14,9 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { getEventsForDate, deleteEvent } from '../services/GoogleCalendarService';
 import EventModal from '../components/EventModal';
 import LogoutModal from '../components/LogoutModal';
+import TokenExpiredModal from '../components/TokenExpiredModal';
 import { Swipeable } from 'react-native-gesture-handler';
+import AuthManager from '../services/AuthManager';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,9 +31,23 @@ const EventListScreen = ({ route, navigation }) => {
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [eventToDelete, setEventToDelete] = useState(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
+    const [showTokenExpiredModal, setShowTokenExpiredModal] = useState(false);
+
+    const authManager = AuthManager.getInstance();
 
     useEffect(() => {
+        // Set up token expiry callback
+        authManager.setTokenExpiredCallback(() => {
+            console.log('Token expired callback triggered in EventListScreen');
+            setShowTokenExpiredModal(true);
+        });
+
         fetchEvents();
+
+        return () => {
+            // Cleanup callback when component unmounts
+            authManager.setTokenExpiredCallback(null);
+        };
     }, [date]);
 
     const fetchEvents = async () => {
@@ -41,7 +57,11 @@ const EventListScreen = ({ route, navigation }) => {
             setEvents(fetchedEvents);
         } catch (error) {
             console.error('Error fetching events:', error);
-            Alert.alert('Error', 'Failed to fetch events');
+            // Don't show alert for auth errors as they're handled by AuthManager
+            if (!error.message.includes('Authentication failed') && 
+                !error.message.includes('Token refresh failed')) {
+                Alert.alert('Error', 'Failed to fetch events');
+            }
         } finally {
             setLoading(false);
         }
@@ -92,8 +112,11 @@ const EventListScreen = ({ route, navigation }) => {
             console.error('Error deleting event:', error);
             setDeleteLoading(false);
             
-            // Show error alert but keep modal open so user can try again
-            Alert.alert('Error', 'Failed to delete event');
+            // Only show error alert if it's not an auth error
+            if (!error.message.includes('Authentication failed') && 
+                !error.message.includes('Token refresh failed')) {
+                Alert.alert('Error', 'Failed to delete event');
+            }
         }
     };
 
@@ -102,6 +125,26 @@ const EventListScreen = ({ route, navigation }) => {
         setDeleteModalVisible(false);
         setEventToDelete(null);
         setDeleteLoading(false);
+    };
+
+    const handleReLogin = async () => {
+        try {
+            // Logout and navigate to login screen
+            await authManager.logout();
+            setShowTokenExpiredModal(false);
+            navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+            });
+        } catch (error) {
+            console.error('Error during re-login process:', error);
+            // Still navigate to login even if logout fails
+            setShowTokenExpiredModal(false);
+            navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+            });
+        }
     };
 
     const formatDate = (dateString) => {
@@ -251,6 +294,12 @@ const EventListScreen = ({ route, navigation }) => {
                 onCancel={cancelDeleteEvent}
                 title="Delete Event"
                 message={`Are you sure you want to delete "${eventToDelete?.summary || 'this event'}"?`}
+            />
+
+            {/* Token Expired Modal */}
+            <TokenExpiredModal 
+                visible={showTokenExpiredModal} 
+                onReLogin={handleReLogin}
             />
         </View>
     );

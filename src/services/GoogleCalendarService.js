@@ -1,4 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import AuthManager from './AuthManager';
+
+const authManager = AuthManager.getInstance();
 
 const getAccessToken = async () => {
     console.log("Retrieving access token from storage");
@@ -14,6 +17,11 @@ const getAccessToken = async () => {
 const baseUrl = 'https://www.googleapis.com/calendar/v3';
 const calendarId = 'primary';
 
+// Helper function to make authenticated requests
+const makeAuthenticatedRequest = async (url, options = {}) => {
+    return await authManager.makeAuthenticatedRequest(url, options);
+};
+
 // GET - Fetch all calendars
 export const getCalendarList = async () => {
     const accessToken = await getAccessToken();
@@ -24,14 +32,7 @@ export const getCalendarList = async () => {
 
     try {
         const url = `${baseUrl}/users/me/calendarList`;
-
-        const response = await fetch(url, {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-            },
-        });
+        const response = await makeAuthenticatedRequest(url, { method: "GET" });
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -103,13 +104,7 @@ export const getEvents = async () => {
                         url.searchParams.append("pageToken", pageToken);
                     }
 
-                    const response = await fetch(url.toString(), {
-                        method: "GET",
-                        headers: {
-                            Authorization: `Bearer ${accessToken}`,
-                            "Content-Type": "application/json",
-                        },
-                    });
+                    const response = await makeAuthenticatedRequest(url.toString(), { method: "GET" });
 
                     if (response.ok) {
                         const data = await response.json();
@@ -209,13 +204,7 @@ export const getEventsForDate = async (date) => {
                 url.searchParams.append("singleEvents", "true");
                 url.searchParams.append("orderBy", "startTime");
 
-                const response = await fetch(url.toString(), {
-                    method: "GET",
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                        "Content-Type": "application/json",
-                    },
-                });
+                const response = await makeAuthenticatedRequest(url.toString(), { method: "GET" });
 
                 if (response.ok) {
                     const data = await response.json();
@@ -267,13 +256,8 @@ export const createEvent = async (eventData) => {
 
     try {
         const url = `${baseUrl}/calendars/${calendarId}/events`;
-
-        const response = await fetch(url, {
+        const response = await makeAuthenticatedRequest(url, {
             method: "POST",
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-            },
             body: JSON.stringify(eventData),
         });
 
@@ -300,13 +284,8 @@ export const updateEvent = async (eventId, eventData) => {
 
     try {
         const url = `${baseUrl}/calendars/${calendarId}/events/${eventId}`;
-
-        const response = await fetch(url, {
+        const response = await makeAuthenticatedRequest(url, {
             method: "PUT",
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-            },
             body: JSON.stringify(eventData),
         });
 
@@ -333,14 +312,7 @@ export const deleteEvent = async (eventId) => {
 
     try {
         const url = `${baseUrl}/calendars/${calendarId}/events/${eventId}`;
-
-        const response = await fetch(url, {
-            method: "DELETE",
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-            },
-        });
+        const response = await makeAuthenticatedRequest(url, { method: "DELETE" });
 
         if (!response.ok) {
             const errorData = await response.json();

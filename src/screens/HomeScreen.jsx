@@ -4,6 +4,8 @@ import Header from '../components/Header';
 import { Calendar } from 'react-native-calendars';
 import { getEvents } from '../services/GoogleCalendarService';
 import { useFocusEffect } from '@react-navigation/native';
+import AuthManager from '../services/AuthManager';
+import TokenExpiredModal from '../components/TokenExpiredModal';
 
 const { height, width } = Dimensions.get('window');
 
@@ -13,6 +15,22 @@ const HomeScreen = (props) => {
   const [refreshing, setRefreshing] = useState(false);
   const [todayEvents, setTodayEvents] = useState(0);
   const [calendarKey, setCalendarKey] = useState(0); // Add calendar key for forced re-render
+  const [showTokenExpiredModal, setShowTokenExpiredModal] = useState(false);
+
+  const authManager = AuthManager.getInstance();
+
+  useEffect(() => {
+    // Set up token expiry callback
+    authManager.setTokenExpiredCallback(() => {
+      console.log('Token expired callback triggered in HomeScreen');
+      setShowTokenExpiredModal(true);
+    });
+
+    return () => {
+      // Cleanup callback when component unmounts
+      authManager.setTokenExpiredCallback(null);
+    };
+  }, []);
 
   const fetchEvents = async () => {
     try {
@@ -23,7 +41,11 @@ const HomeScreen = (props) => {
       calculateTodayEvents(fetchedEvents);
     } catch (error) {
       console.error('Error fetching events:', error);
-      Alert.alert('Error', 'Failed to fetch events');
+      // Don't show alert for auth errors as they're handled by AuthManager
+      if (!error.message.includes('Authentication failed') && 
+          !error.message.includes('Token refresh failed')) {
+        Alert.alert('Error', 'Failed to fetch events');
+      }
     }
   };
 
@@ -39,7 +61,6 @@ const HomeScreen = (props) => {
       fetchEvents();
     }, [])
   );
-
 
   const calculateTodayEvents = (eventsList) => {
     const today = new Date().toISOString().split('T')[0];
@@ -119,6 +140,26 @@ const HomeScreen = (props) => {
       date: day.dateString,
       dateString: day.dateString 
     });
+  };
+
+  const handleReLogin = async () => {
+    try {
+      // Logout and navigate to login screen
+      await authManager.logout();
+      setShowTokenExpiredModal(false);
+      props.navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    } catch (error) {
+      console.error('Error during re-login process:', error);
+      // Still navigate to login even if logout fails
+      setShowTokenExpiredModal(false);
+      props.navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    }
   };
 
   return (
@@ -220,11 +261,13 @@ const HomeScreen = (props) => {
           <Text style={styles.statNumber}>{todayEvents}</Text>
           <Text style={styles.statLabel}>Today's Events</Text>
         </View>
-        {/* <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{getDaysWithEvents()}</Text>
-          <Text style={styles.statLabel}>Days with Events</Text>
-        </View> */}
       </View>
+
+      {/* Token Expired Modal */}
+      <TokenExpiredModal 
+        visible={showTokenExpiredModal} 
+        onReLogin={handleReLogin}
+      />
     </View>
   );
 };

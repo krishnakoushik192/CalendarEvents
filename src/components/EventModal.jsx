@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { createEvent, updateEvent, formatEventForAPI } from '../services/GoogleCalendarService';
+import AuthManager from '../services/AuthManager';
+import TokenExpiredModal from './TokenExpiredModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -25,6 +27,22 @@ const EventModal = ({ visible, type, event, date, onClose, onEventUpdated }) => 
     const [endTime, setEndTime] = useState('10:00');
     const [eventDate, setEventDate] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showTokenExpiredModal, setShowTokenExpiredModal] = useState(false);
+
+    const authManager = AuthManager.getInstance();
+
+    useEffect(() => {
+        // Set up token expiry callback
+        authManager.setTokenExpiredCallback(() => {
+            console.log('Token expired callback triggered in EventModal');
+            setShowTokenExpiredModal(true);
+        });
+
+        return () => {
+            // Cleanup callback when component unmounts
+            authManager.setTokenExpiredCallback(null);
+        };
+    }, []);
 
     useEffect(() => {
         if (visible) {
@@ -55,6 +73,20 @@ const EventModal = ({ visible, type, event, date, onClose, onEventUpdated }) => 
             }
         }
     }, [visible, type, event, date]);
+
+    const handleReLogin = async () => {
+        try {
+            // Logout and close modal
+            await authManager.logout();
+            setShowTokenExpiredModal(false);
+            onClose(); // Close the event modal
+            // Navigation will be handled by parent component
+        } catch (error) {
+            console.error('Error during re-login process:', error);
+            setShowTokenExpiredModal(false);
+            onClose();
+        }
+    };
 
     const handleSave = async () => {
         if (!title.trim()) {
@@ -92,7 +124,12 @@ const EventModal = ({ visible, type, event, date, onClose, onEventUpdated }) => 
             onClose();
         } catch (error) {
             console.error('Error saving event:', error);
-            Alert.alert('Error', 'Failed to save event. Please try again.');
+            // Don't show alert for auth errors as they're handled by AuthManager
+            if (!error.message.includes('Authentication failed') && 
+                !error.message.includes('Token refresh failed') &&
+                !error.message.includes('No access token found')) {
+                Alert.alert('Error', 'Failed to save event. Please try again.');
+            }
         } finally {
             setLoading(false);
         }
@@ -111,7 +148,7 @@ const EventModal = ({ visible, type, event, date, onClose, onEventUpdated }) => 
     const generateTimeOptions = () => {
         const times = [];
         for (let hour = 0; hour < 24; hour++) {
-            for (let minute = 0; minute < 60; minute +=60) { // Changed to 15-minute intervals for better UX
+            for (let minute = 0; minute < 60; minute += 60) { // Changed to 60-minute intervals for better UX
                 const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
                 const displayTime = new Date(`2000-01-01T${timeString}`).toLocaleTimeString('en-US', {
                     hour: 'numeric',
@@ -180,139 +217,147 @@ const EventModal = ({ visible, type, event, date, onClose, onEventUpdated }) => 
     const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
     return (
-        <Modal
-            visible={visible}
-            animationType="slide"
-            presentationStyle="pageSheet"
-            onRequestClose={onClose}
-        >
-            <View style={styles.container}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <MaterialIcons name="close" size={24} color="white" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>
-                        {type === 'edit' ? 'Edit Event' : 'Create Event'}
-                    </Text>
-                    <TouchableOpacity 
-                        onPress={handleSave} 
-                        style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator size="small" color="white" />
-                        ) : (
-                            <Text style={styles.saveButtonText}>Save</Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
-
-                <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                    {/* Title Input */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Title *</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={title}
-                            onChangeText={setTitle}
-                            placeholder="Enter event title"
-                            placeholderTextColor="#666"
-                            maxLength={100}
-                        />
+        <>
+            <Modal
+                visible={visible}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={onClose}
+            >
+                <View style={styles.container}>
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                            <MaterialIcons name="close" size={24} color="white" />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>
+                            {type === 'edit' ? 'Edit Event' : 'Create Event'}
+                        </Text>
+                        <TouchableOpacity 
+                            onPress={handleSave} 
+                            style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator size="small" color="white" />
+                            ) : (
+                                <Text style={styles.saveButtonText}>Save</Text>
+                            )}
+                        </TouchableOpacity>
                     </View>
 
-                    {/* Date Display */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Date</Text>
-                        <View style={styles.dateDisplay}>
-                            <MaterialIcons name="event" size={20} color="#4285F4" />
-                            <Text style={styles.dateDisplayText}>
-                                {formatDateDisplay(eventDate)}
-                            </Text>
+                    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+                        {/* Title Input */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Title *</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={title}
+                                onChangeText={setTitle}
+                                placeholder="Enter event title"
+                                placeholderTextColor="#666"
+                                maxLength={100}
+                            />
                         </View>
-                    </View>
 
-                    {/* Time Selection */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Time</Text>
-                        <View style={styles.timeContainer}>
-                            <TouchableOpacity 
-                                style={styles.timeButton}
-                                onPress={() => setShowStartTimePicker(true)}
-                            >
-                                <MaterialIcons name="access-time" size={20} color="#4285F4" />
-                                <Text style={styles.timeButtonText}>
-                                    {timeOptions.find(t => t.value === startTime)?.display || startTime}
+                        {/* Date Display */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Date</Text>
+                            <View style={styles.dateDisplay}>
+                                <MaterialIcons name="event" size={20} color="#4285F4" />
+                                <Text style={styles.dateDisplayText}>
+                                    {formatDateDisplay(eventDate)}
                                 </Text>
-                                <Text style={styles.timeLabel}>Start</Text>
-                            </TouchableOpacity>
-                            
-                            <View style={styles.timeSeparator}>
-                                <Text style={styles.timeSeparatorText}>to</Text>
                             </View>
-                            
-                            <TouchableOpacity 
-                                style={styles.timeButton}
-                                onPress={() => setShowEndTimePicker(true)}
-                            >
-                                <MaterialIcons name="access-time" size={20} color="#4285F4" />
-                                <Text style={styles.timeButtonText}>
-                                    {timeOptions.find(t => t.value === endTime)?.display || endTime}
-                                </Text>
-                                <Text style={styles.timeLabel}>End</Text>
-                            </TouchableOpacity>
                         </View>
-                    </View>
 
-                    {/* Location Input */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Location</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={location}
-                            onChangeText={setLocation}
-                            placeholder="Enter location (optional)"
-                            placeholderTextColor="#666"
-                            maxLength={200}
-                        />
-                    </View>
+                        {/* Time Selection */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Time</Text>
+                            <View style={styles.timeContainer}>
+                                <TouchableOpacity 
+                                    style={styles.timeButton}
+                                    onPress={() => setShowStartTimePicker(true)}
+                                >
+                                    <MaterialIcons name="access-time" size={20} color="#4285F4" />
+                                    <Text style={styles.timeButtonText}>
+                                        {timeOptions.find(t => t.value === startTime)?.display || startTime}
+                                    </Text>
+                                    <Text style={styles.timeLabel}>Start</Text>
+                                </TouchableOpacity>
+                                
+                                <View style={styles.timeSeparator}>
+                                    <Text style={styles.timeSeparatorText}>to</Text>
+                                </View>
+                                
+                                <TouchableOpacity 
+                                    style={styles.timeButton}
+                                    onPress={() => setShowEndTimePicker(true)}
+                                >
+                                    <MaterialIcons name="access-time" size={20} color="#4285F4" />
+                                    <Text style={styles.timeButtonText}>
+                                        {timeOptions.find(t => t.value === endTime)?.display || endTime}
+                                    </Text>
+                                    <Text style={styles.timeLabel}>End</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
 
-                    {/* Description Input */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Description</Text>
-                        <TextInput
-                            style={[styles.input, styles.textArea]}
-                            value={description}
-                            onChangeText={setDescription}
-                            placeholder="Enter description (optional)"
-                            placeholderTextColor="#666"
-                            multiline={true}
-                            numberOfLines={4}
-                            textAlignVertical="top"
-                            maxLength={500}
-                        />
-                    </View>
-                </ScrollView>
+                        {/* Location Input */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Location</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={location}
+                                onChangeText={setLocation}
+                                placeholder="Enter location (optional)"
+                                placeholderTextColor="#666"
+                                maxLength={200}
+                            />
+                        </View>
 
-                {/* Time Picker Modals */}
-                <TimePickerModal
-                    visible={showStartTimePicker}
-                    value={startTime}
-                    onSelect={setStartTime}
-                    onClose={() => setShowStartTimePicker(false)}
-                    title="Select Start Time"
-                />
+                        {/* Description Input */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Description</Text>
+                            <TextInput
+                                style={[styles.input, styles.textArea]}
+                                value={description}
+                                onChangeText={setDescription}
+                                placeholder="Enter description (optional)"
+                                placeholderTextColor="#666"
+                                multiline={true}
+                                numberOfLines={4}
+                                textAlignVertical="top"
+                                maxLength={500}
+                            />
+                        </View>
+                    </ScrollView>
 
-                <TimePickerModal
-                    visible={showEndTimePicker}
-                    value={endTime}
-                    onSelect={setEndTime}
-                    onClose={() => setShowEndTimePicker(false)}
-                    title="Select End Time"
-                />
-            </View>
-        </Modal>
+                    {/* Time Picker Modals */}
+                    <TimePickerModal
+                        visible={showStartTimePicker}
+                        value={startTime}
+                        onSelect={setStartTime}
+                        onClose={() => setShowStartTimePicker(false)}
+                        title="Select Start Time"
+                    />
+
+                    <TimePickerModal
+                        visible={showEndTimePicker}
+                        value={endTime}
+                        onSelect={setEndTime}
+                        onClose={() => setShowEndTimePicker(false)}
+                        title="Select End Time"
+                    />
+                </View>
+            </Modal>
+
+            {/* Token Expired Modal */}
+            <TokenExpiredModal 
+                visible={showTokenExpiredModal} 
+                onReLogin={handleReLogin}
+            />
+        </>
     );
 };
 
