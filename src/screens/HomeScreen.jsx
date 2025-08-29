@@ -1,8 +1,21 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, Alert, RefreshControl, ScrollView, ProgressBarAndroid, Pressable } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Dimensions, 
+  Alert, 
+  RefreshControl, 
+  ScrollView, 
+  ProgressBarAndroid, 
+  Pressable,
+  PanResponder,
+  Animated,
+  Vibration
+} from 'react-native';
 import Header from '../components/Header';
 import { Calendar } from 'react-native-calendars';
-import { getEvents } from '../services/GoogleCalendarService';
+import { getEvents, updateEvent } from '../services/GoogleCalendarService';
 import { useFocusEffect } from '@react-navigation/native';
 import AuthManager from '../services/AuthManager';
 import TokenExpiredModal from '../components/TokenExpiredModal';
@@ -18,6 +31,12 @@ const HomeScreen = (props) => {
   const [showTokenExpiredModal, setShowTokenExpiredModal] = useState(false);
   const [eventLoading, setEventLoading] = useState(false);
   const [eventsByDate, setEventsByDate] = useState({});
+  
+  // Drag and drop state
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggedEvent, setDraggedEvent] = useState(null);
+  const [draggedFromDate, setDraggedFromDate] = useState(null);
+  const [dropZoneDate, setDropZoneDate] = useState(null);
 
   const authManager = AuthManager.getInstance();
 
@@ -154,7 +173,14 @@ const HomeScreen = (props) => {
       setCalendarKey(prev => prev + 1);
     }, 50);
   };
+
   const onDayPress = (day) => {
+    if (isDragging) {
+      // Handle drop
+      handleDrop(day.dateString);
+      return;
+    }
+    
     console.log('selected day', day);
     props.navigation.navigate("EventList", {
       date: day.dateString,
@@ -162,61 +188,207 @@ const HomeScreen = (props) => {
     });
   };
 
-  // Custom day component to show events
+  // Handle dropping event on a date
+  const handleDrop = (targetDate) => {
+    if (!draggedEvent || !draggedFromDate) return;
+
+    if (targetDate === draggedFromDate) {
+      // Dropped on same date, cancel
+      resetDragState();
+      return;
+    }
+
+    const targetDateFormatted = new Date(targetDate).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    Alert.alert(
+      'Move Event',
+      `Move "${draggedEvent.summary}" to ${targetDateFormatted}?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: resetDragState,
+        },
+        {
+          text: 'Move',
+          onPress: () => moveEventToDate(draggedEvent, targetDate),
+        },
+      ]
+    );
+  };
+
+  // Reset drag state
+  const resetDragState = () => {
+    setIsDragging(false);
+    setDraggedEvent(null);
+    setDraggedFromDate(null);
+    setDropZoneDate(null);
+  };
+
+  // Function to handle event move
+  const moveEventToDate = async (event, newDate) => {
+    try {
+      setEventLoading(true);
+      resetDragState();
+      
+      let updatedEventData = {};
+      
+      if (event.start?.dateTime) {
+        // For timed events, keep the same time but change the date
+        const originalDateTime = new Date(event.start.dateTime);
+        const hours = originalDateTime.getHours();
+        const minutes = originalDateTime.getMinutes();
+        const seconds = originalDateTime.getSeconds();
+        
+        const newDateTime = new Date(newDate);
+        newDateTime.setHours(hours, minutes, seconds, 0);
+        
+        updatedEventData.start = {
+          dateTime: newDateTime.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        };
+        
+        if (event.end?.dateTime) {
+          const originalEndDate = new Date(event.end.dateTime);
+          const duration = originalEndDate.getTime() - originalDateTime.getTime();
+          const newEndDateTime = new Date(newDateTime.getTime() + duration);
+          updatedEventData.end = {
+            dateTime: newEndDateTime.toISOString(),
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          };
+        }
+      } else if (event.start?.date) {
+        // For all-day events
+        updatedEventData.start = { date: newDate };
+        if (event.end?.date) {
+          updatedEventData.end = { date: newDate };
+        }
+      }
+
+      // Preserve other event properties
+      updatedEventData.summary = event.summary;
+      if (event.description) updatedEventData.description = event.description;
+      if (event.location) updatedEventData.location = event.location;
+      if (event.reminders) updatedEventData.reminders = event.reminders;
+
+      console.log('Updating event with data:', updatedEventData);
+
+      // Call your Google Calendar API to update the event
+      await updateEvent(event.id, updatedEventData);
+      
+      // Refresh events after successful update
+      await fetchEvents();
+      
+      Alert.alert('Success', `Event "${event.summary}" moved successfully!`);
+    } catch (error) {
+      console.error('Error moving event:', error);
+      Alert.alert('Error', 'Failed to move event. Please try again.');
+    } finally {
+      setEventLoading(false);
+    }
+  };
+
+  // Handle long press on event
+  const handleEventLongPress = (event, dateString) => {
+    // Check if event can be moved
+    if (event.isHoliday || (event.calendarId && event.calendarId !== 'primary')) {
+      Alert.alert('Cannot Move Event', 'Only your personal events can be moved.');
+      return;
+    }
+
+    Vibration.vibrate(100); // Haptic feedback
+    setIsDragging(true);
+    setDraggedEvent(event);
+    setDraggedFromDate(dateString);
+    console.log('Started dragging event:', event.summary);
+  };
+
+  // Custom day component
   const DayComponent = ({ date, marking }) => {
     const dateString = date.dateString;
     const dayEvents = eventsByDate[dateString] || [];
     const isToday = dateString === new Date().toISOString().split('T')[0];
     const hasEvents = dayEvents.length > 0;
+    const isDropZone = isDragging && dateString !== draggedFromDate;
+    const isDragSource = isDragging && dateString === draggedFromDate;
 
     return (
-      <Pressable onPress={() => onDayPress(date)}>
-        <View style={styles.dayContainer}>
-          <View style={[
-            styles.dayHeader,
-            isToday && styles.todayHeader
+      <Pressable 
+        onPress={() => onDayPress(date)}
+        style={[
+          styles.dayContainer,
+          isDropZone && styles.dropZone,
+          isDragSource && styles.dragSource
+        ]}
+      >
+        <View style={[
+          styles.dayHeader,
+          isToday && styles.todayHeader
+        ]}>
+          <Text style={[
+            styles.dayText,
+            isToday && styles.todayText
           ]}>
-            <Text style={[
-              styles.dayText,
-              isToday && styles.todayText
-            ]}>
-              {date.day}
-            </Text>
-          </View>
+            {date.day}
+          </Text>
+        </View>
 
-          {hasEvents && (
-            <View style={styles.eventContainer}>
-              {dayEvents.slice(0, 2).map((event, index) => (
-                <View
+        {hasEvents && (
+          <View style={styles.eventContainer}>
+            {dayEvents.slice(0, 2).map((event, index) => {
+              const canBeMoved = !event.isHoliday && (!event.calendarId || event.calendarId === 'primary');
+              const isDraggedEvent = isDragging && draggedEvent?.id === event.id;
+              
+              return (
+                <Pressable
                   key={event.id}
+                  onLongPress={() => handleEventLongPress(event, dateString)}
+                  delayLongPress={200}
                   style={[
                     styles.eventBox,
-                    { backgroundColor: isToday ? '#1976D2' : '#2E7D32' }
+                    { 
+                      backgroundColor: isToday ? '#1976D2' : '#2E7D32',
+                      opacity: isDraggedEvent ? 0.5 : (canBeMoved ? 1 : 0.7),
+                      borderWidth: isDraggedEvent ? 2 : 0,
+                      borderColor: isDraggedEvent ? '#FF6B35' : 'transparent',
+                    }
                   ]}
                 >
-                  <Text style={styles.eventText} numberOfLines={1}>
+                  <Text style={[
+                    styles.eventText,
+                    !canBeMoved && styles.nonEditableEventText
+                  ]} numberOfLines={1}>
                     {event.summary || 'Untitled'}
+                    {event.isHoliday && ' 🎉'}
                   </Text>
-                </View>
-              ))}
-              {dayEvents.length > 2 && (
-                <View style={[
-                  styles.moreEventsBox,
-                  { backgroundColor: isToday ? '#0D47A1' : '#1B5E20' }
-                ]}>
-                  <Text style={styles.moreEventsText}>
-                    +{dayEvents.length - 2} more
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
+                </Pressable>
+              );
+            })}
+            {dayEvents.length > 2 && (
+              <View style={[
+                styles.moreEventsBox,
+                { backgroundColor: isToday ? '#0D47A1' : '#1B5E20' }
+              ]}>
+                <Text style={styles.moreEventsText}>
+                  +{dayEvents.length - 2} more
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {isDropZone && (
+          <View style={styles.dropIndicator}>
+            <Text style={styles.dropIndicatorText}>Drop Here</Text>
+          </View>
+        )}
       </Pressable>
     );
   };
-
-
 
   const handleReLogin = async () => {
     try {
@@ -250,6 +422,7 @@ const HomeScreen = (props) => {
           />
         }
         contentContainerStyle={styles.scrollContent}
+        scrollEnabled={!isDragging}
       >
         <Header nav={props.navigation} />
         <ProgressBarAndroid
@@ -258,6 +431,20 @@ const HomeScreen = (props) => {
           color="#4285F4"
           style={{ width: '100%', height: 20 }}
         />
+
+        {isDragging && (
+          <View style={styles.dragNotification}>
+            <Text style={styles.dragNotificationText}>
+              Moving "{draggedEvent?.summary}" - Tap any date to drop
+            </Text>
+            <Pressable 
+              style={styles.cancelButton}
+              onPress={resetDragState}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        )}
 
         <View style={styles.calendarContainer}>
           <Calendar
@@ -290,7 +477,7 @@ const HomeScreen = (props) => {
               borderBottomWidth: 0,
             }}
             style={styles.calendar}
-            enableSwipeMonths={true}
+            enableSwipeMonths={!isDragging}
             hideExtraDays={true}
             firstDay={1}
           />
@@ -306,6 +493,11 @@ const HomeScreen = (props) => {
             <View style={[styles.legendDot, { backgroundColor: '#2E7D32' }]} />
             <Text style={styles.legendText}>Other Events</Text>
           </View>
+          {!isDragging && (
+            <View style={styles.legendItem}>
+              <Text style={styles.legendHint}>Long press events to move them</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.spacer} />
@@ -356,6 +548,35 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
+  // Drag notification bar
+  dragNotification: {
+    backgroundColor: '#FF6B35',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: width * 0.02,
+    marginTop: 10,
+    borderRadius: 8,
+  },
+  dragNotificationText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontFamily: 'Lato-Regular',
+    flex: 1,
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  cancelButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontFamily: 'Lato-Bold',
+  },
   // Custom day component styles
   dayContainer: {
     width: width * 0.13,
@@ -363,6 +584,18 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     alignItems: 'center',
     paddingVertical: 2,
+    borderRadius: 6,
+  },
+  dropZone: {
+    backgroundColor: 'rgba(255, 107, 53, 0.3)',
+    borderWidth: 2,
+    borderColor: '#FF6B35',
+    borderStyle: 'dashed',
+  },
+  dragSource: {
+    backgroundColor: 'rgba(66, 133, 244, 0.2)',
+    borderWidth: 1,
+    borderColor: '#4285F4',
   },
   dayHeader: {
     width: '100%',
@@ -391,7 +624,7 @@ const styles = StyleSheet.create({
   eventBox: {
     borderRadius: 3,
     paddingHorizontal: 2,
-    paddingVertical: 1,
+    paddingVertical: 3,
     marginVertical: 0.5,
   },
   eventText: {
@@ -399,6 +632,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Lato-Regular',
     textAlign: 'center',
+  },
+  nonEditableEventText: {
+    fontStyle: 'italic',
+    opacity: 0.8,
   },
   moreEventsBox: {
     borderRadius: 3,
@@ -413,12 +650,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
+  dropIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    alignSelf: 'center',
+    backgroundColor: '#FF6B35',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  dropIndicatorText: {
+    fontSize: 6,
+    color: '#ffffff',
+    fontFamily: 'Lato-Bold',
+  },
   legendContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     paddingHorizontal: width * 0.04,
     paddingVertical: height * 0.02,
-    gap: 20,
+    gap: 15,
+    flexWrap: 'wrap',
   },
   legendItem: {
     flexDirection: 'row',
@@ -434,6 +686,12 @@ const styles = StyleSheet.create({
     color: '#cccccc',
     fontSize: 12,
     fontFamily: 'Lato-Regular',
+  },
+  legendHint: {
+    color: '#888888',
+    fontSize: 11,
+    fontFamily: 'Lato-Regular',
+    fontStyle: 'italic',
   },
   spacer: {
     flex: 1,
