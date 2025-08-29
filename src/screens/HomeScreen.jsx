@@ -212,10 +212,10 @@ const HomeScreen = (props) => {
 
       {/* Fixed Stats Section at Bottom */}
       <View style={styles.fixedStatsContainer}>
-        {/* <View style={styles.statCard}>
+        <View style={styles.statCard}>
           <Text style={styles.statNumber}>{events.length}</Text>
           <Text style={styles.statLabel}>Total Events</Text>
-        </View> */}
+        </View>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>{todayEvents}</Text>
           <Text style={styles.statLabel}>Today's Events</Text>
