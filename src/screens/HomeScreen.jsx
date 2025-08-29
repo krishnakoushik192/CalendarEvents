@@ -40,14 +40,6 @@ const HomeScreen = (props) => {
     }, [])
   );
 
-  // Auto-refresh every 30 seconds when screen is active
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchEvents();
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, []);
 
   const calculateTodayEvents = (eventsList) => {
     const today = new Date().toISOString().split('T')[0];
@@ -107,7 +99,7 @@ const HomeScreen = (props) => {
       const todayHasEvents = eventsByDate[today] && eventsByDate[today] > 0;
       marked[today] = {
         selected: true,
-        selectedColor: '#34A853',
+        selectedColor: '#4285F4',
         selectedTextColor: '#ffffff',
         ...(todayHasEvents && {
           marked: true,
@@ -127,22 +119,6 @@ const HomeScreen = (props) => {
       date: day.dateString,
       dateString: day.dateString 
     });
-  };
-
-  const getDaysWithEvents = () => {
-    const uniqueDates = new Set();
-    events.forEach(event => {
-      let eventDate;
-      if (event.start?.dateTime) {
-        eventDate = event.start.dateTime.split('T')[0];
-      } else if (event.start?.date) {
-        eventDate = event.start.date;
-      }
-      if (eventDate) {
-        uniqueDates.add(eventDate);
-      }
-    });
-    return uniqueDates.size;
   };
 
   return (
@@ -173,9 +149,9 @@ const HomeScreen = (props) => {
               calendarBackground: '#000000',
               textSectionTitleColor: '#ffffff',
               textDayHeaderFontFamily: 'Lato-Regular',
-              selectedDayBackgroundColor: '#34A853',
+              selectedDayBackgroundColor: '#4285F4',
               selectedDayTextColor: '#ffffff',
-              todayTextColor: '#34A853',
+              todayTextColor: '#4285F4',
               dayTextColor: '#ffffff',
               textDisabledColor: '#444444',
               dotColor: '#4285F4',
@@ -228,10 +204,6 @@ const HomeScreen = (props) => {
             <View style={[styles.legendDot, { backgroundColor: '#4285F4' }]} />
             <Text style={styles.legendText}>Other Days</Text>
           </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#34A853' }]} />
-            <Text style={styles.legendText}>Today</Text>
-          </View>
         </View>
 
         {/* Spacer to push stats to bottom */}
@@ -240,18 +212,18 @@ const HomeScreen = (props) => {
 
       {/* Fixed Stats Section at Bottom */}
       <View style={styles.fixedStatsContainer}>
-        <View style={styles.statCard}>
+        {/* <View style={styles.statCard}>
           <Text style={styles.statNumber}>{events.length}</Text>
           <Text style={styles.statLabel}>Total Events</Text>
-        </View>
+        </View> */}
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>{todayEvents}</Text>
           <Text style={styles.statLabel}>Today's Events</Text>
         </View>
-        <View style={styles.statCard}>
+        {/* <View style={styles.statCard}>
           <Text style={styles.statNumber}>{getDaysWithEvents()}</Text>
           <Text style={styles.statLabel}>Days with Events</Text>
-        </View>
+        </View> */}
       </View>
     </View>
   );

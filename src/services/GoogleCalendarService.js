@@ -14,7 +14,39 @@ const getAccessToken = async () => {
 const baseUrl = 'https://www.googleapis.com/calendar/v3';
 const calendarId = 'primary';
 
-// GET - Fetch all events
+// GET - Fetch all calendars
+export const getCalendarList = async () => {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+        console.error("No access token found");
+        return [];
+    }
+
+    try {
+        const url = `${baseUrl}/users/me/calendarList`;
+
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Available calendars:", data.items?.map(cal => ({ id: cal.id, summary: cal.summary })));
+        return data.items || [];
+    } catch (error) {
+        console.error("Error fetching calendar list:", error);
+        return [];
+    }
+};
+
+// GET - Fetch events from all calendars including holidays
 export const getEvents = async () => {
     const accessToken = await getAccessToken();
     if (!accessToken) {
@@ -22,42 +54,106 @@ export const getEvents = async () => {
         return [];
     }
 
-    let events = [];
-    let pageToken = null;
-
     try {
-        do {
-            const url = new URL(`${baseUrl}/calendars/${calendarId}/events`);
-            url.searchParams.append("maxResults", "2500");
-            url.searchParams.append("singleEvents", "true");
-            url.searchParams.append("orderBy", "startTime");
-            url.searchParams.append("timeMin", new Date().toISOString());
-            if (pageToken) {
-                url.searchParams.append("pageToken", pageToken);
+        // First get all available calendars
+        const calendars = await getCalendarList();
+        let allEvents = [];
+
+        // Country-specific holiday calendars using Set to avoid duplicates
+        const holidayCalendars = new Set([
+            'en.indian#holiday@group.v.calendar.google.com', // Indian holidays
+            'en.usa#holiday@group.v.calendar.google.com',    // US holidays
+            'en.uk#holiday@group.v.calendar.google.com',     // UK holidays
+        ]);
+
+        // Add discovered holiday calendars from the user's calendar list
+        calendars.forEach(calendar => {
+            if (calendar.id.includes('#holiday@group.v.calendar.google.com') ||
+                calendar.summary?.toLowerCase().includes('holiday') ||
+                calendar.summary?.toLowerCase().includes('festival')) {
+                holidayCalendars.add(calendar.id);
             }
+        });
 
-            const response = await fetch(url.toString(), {
-                method: "GET",
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                    "Content-Type": "application/json",
-                },
-            });
+        // Fetch events from primary calendar and all holiday calendars
+        const calendarIdsToFetch = ['primary', ...Array.from(holidayCalendars)];
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+        console.log("Fetching from calendars:", calendarIdsToFetch); // Debug log
 
-            const data = await response.json();
+        for (const calId of calendarIdsToFetch) {
+            let pageToken = null;
 
-            if (data.items) {
-                events = [...events, ...data.items];
-            }
-            pageToken = data.nextPageToken;
-        } while (pageToken);
+            do {
+                try {
+                    const url = new URL(`${baseUrl}/calendars/${encodeURIComponent(calId)}/events`);
+                    url.searchParams.append("maxResults", "2500");
+                    url.searchParams.append("singleEvents", "true");
+                    url.searchParams.append("orderBy", "startTime");
 
-        console.log("Total events fetched:", events.length);
-        return events;
+                    // Fetch events from 1 year ago to 1 year ahead
+                    const oneYearAgo = new Date();
+                    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+                    const oneYearAhead = new Date();
+                    oneYearAhead.setFullYear(oneYearAhead.getFullYear() + 1);
+
+                    url.searchParams.append("timeMin", oneYearAgo.toISOString());
+                    url.searchParams.append("timeMax", oneYearAhead.toISOString());
+
+                    if (pageToken) {
+                        url.searchParams.append("pageToken", pageToken);
+                    }
+
+                    const response = await fetch(url.toString(), {
+                        method: "GET",
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            "Content-Type": "application/json",
+                        },
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+
+                        if (data.items) {
+                            console.log(`Found ${data.items.length} events in calendar: ${calId}`); // Debug log
+                            // Add calendar info to each event
+                            const eventsWithCalendarInfo = data.items.map(event => ({
+                                ...event,
+                                calendarId: calId,
+                                isHoliday: calId.includes('#holiday@group.v.calendar.google.com'),
+                                isEditable: calId === 'primary' // Only primary calendar events are editable
+                            }));
+                            allEvents = [...allEvents, ...eventsWithCalendarInfo];
+                        }
+                        pageToken = data.nextPageToken;
+                    } else {
+                        console.warn(`Failed to fetch events from calendar ${calId}: ${response.status}`);
+                        break; // Exit the pagination loop for this calendar
+                    }
+                } catch (calendarError) {
+                    console.warn(`Error fetching from calendar ${calId}:`, calendarError.message);
+                    break; // Exit the pagination loop for this calendar
+                }
+            } while (pageToken);
+        }
+
+        console.log(`Total events before deduplication: ${allEvents.length}`);
+
+        // Remove duplicate events (same event ID from different sources)
+        const uniqueEvents = allEvents.filter((event, index, self) =>
+            index === self.findIndex((e) => e.id === event.id)
+        );
+
+        console.log(`Total events after deduplication: ${uniqueEvents.length}`);
+
+        // Sort events by start time
+        uniqueEvents.sort((a, b) => {
+            const aStart = a.start?.dateTime || a.start?.date || '';
+            const bStart = b.start?.dateTime || b.start?.date || '';
+            return new Date(aStart) - new Date(bStart);
+        });
+
+        return uniqueEvents;
     } catch (error) {
         console.error("Error fetching events:", error);
         return [];
@@ -73,6 +169,31 @@ export const getEventsForDate = async (date) => {
     }
 
     try {
+        // Get all calendars
+        const calendars = await getCalendarList();
+        let allEvents = [];
+
+        // Holiday calendars - using Set to avoid duplicates
+        const holidayCalendars = new Set([
+            'en.indian#holiday@group.v.calendar.google.com',
+            'en.usa#holiday@group.v.calendar.google.com',
+            'en.uk#holiday@group.v.calendar.google.com',
+        ]);
+
+        // Add discovered holiday calendars (avoid duplicates with Set)
+        calendars.forEach(calendar => {
+            if (calendar.id.includes('#holiday@group.v.calendar.google.com') ||
+                calendar.summary?.toLowerCase().includes('holiday') ||
+                calendar.summary?.toLowerCase().includes('festival')) {
+                holidayCalendars.add(calendar.id);
+            }
+        });
+
+        // Convert Set back to array and add primary calendar
+        const calendarIdsToFetch = ['primary', ...Array.from(holidayCalendars)];
+
+        console.log("Fetching from calendars:", calendarIdsToFetch); // Debug log
+
         // Create start and end of day
         const startOfDay = new Date(date);
         startOfDay.setHours(0, 0, 0, 0);
@@ -80,33 +201,64 @@ export const getEventsForDate = async (date) => {
         const endOfDay = new Date(date);
         endOfDay.setHours(23, 59, 59, 999);
 
-        const url = new URL(`${baseUrl}/calendars/${calendarId}/events`);
-        url.searchParams.append("timeMin", startOfDay.toISOString());
-        url.searchParams.append("timeMax", endOfDay.toISOString());
-        url.searchParams.append("singleEvents", "true");
-        url.searchParams.append("orderBy", "startTime");
+        for (const calId of calendarIdsToFetch) {
+            try {
+                const url = new URL(`${baseUrl}/calendars/${encodeURIComponent(calId)}/events`);
+                url.searchParams.append("timeMin", startOfDay.toISOString());
+                url.searchParams.append("timeMax", endOfDay.toISOString());
+                url.searchParams.append("singleEvents", "true");
+                url.searchParams.append("orderBy", "startTime");
 
-        const response = await fetch(url.toString(), {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-            },
-        });
+                const response = await fetch(url.toString(), {
+                    method: "GET",
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                        "Content-Type": "application/json",
+                    },
+                });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.items) {
+                        console.log(`Found ${data.items.length} events in calendar: ${calId}`); // Debug log
+                        const eventsWithCalendarInfo = data.items.map(event => ({
+                            ...event,
+                            calendarId: calId,
+                            isHoliday: calId.includes('#holiday@group.v.calendar.google.com'),
+                            isEditable: calId === 'primary'
+                        }));
+                        allEvents = [...allEvents, ...eventsWithCalendarInfo];
+                    }
+                }
+            } catch (calendarError) {
+                console.warn(`Error fetching from calendar ${calId}:`, calendarError.message);
+            }
         }
 
-        const data = await response.json();
-        return data.items || [];
+        console.log(`Total events before deduplication: ${allEvents.length}`); // Debug log
+
+        // Remove duplicate events (same event ID from different calendar sources)
+        const uniqueEvents = allEvents.filter((event, index, self) =>
+            index === self.findIndex((e) => e.id === event.id)
+        );
+
+        console.log(`Total events after deduplication: ${uniqueEvents.length}`); // Debug log
+
+        // Sort by start time
+        uniqueEvents.sort((a, b) => {
+            const aStart = a.start?.dateTime || a.start?.date || '';
+            const bStart = b.start?.dateTime || b.start?.date || '';
+            return new Date(aStart) - new Date(bStart);
+        });
+
+        return uniqueEvents;
     } catch (error) {
         console.error("Error fetching events for date:", error);
         return [];
     }
 };
 
-// CREATE - Add new event
+// CREATE - Add new event (only for primary calendar)
 export const createEvent = async (eventData) => {
     const accessToken = await getAccessToken();
     if (!accessToken) {
@@ -139,7 +291,7 @@ export const createEvent = async (eventData) => {
     }
 };
 
-// UPDATE - Edit existing event
+// UPDATE - Edit existing event (only for primary calendar events)
 export const updateEvent = async (eventId, eventData) => {
     const accessToken = await getAccessToken();
     if (!accessToken) {
@@ -172,7 +324,7 @@ export const updateEvent = async (eventId, eventData) => {
     }
 };
 
-// DELETE - Remove event
+// DELETE - Remove event (only for primary calendar events)
 export const deleteEvent = async (eventId) => {
     const accessToken = await getAccessToken();
     if (!accessToken) {
