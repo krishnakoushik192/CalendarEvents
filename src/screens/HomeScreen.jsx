@@ -1,15 +1,17 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Dimensions, 
-  Alert, 
-  RefreshControl, 
-  ScrollView, 
-  ProgressBarAndroid, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  ProgressBarAndroid,
   Pressable,
-  Vibration
+  Vibration,
+  PanResponder,
+  Animated
 } from 'react-native';
 import Header from '../components/Header';
 import { Calendar } from 'react-native-calendars';
@@ -29,11 +31,11 @@ const HomeScreen = (props) => {
   const [showTokenExpiredModal, setShowTokenExpiredModal] = useState(false);
   const [eventLoading, setEventLoading] = useState(false);
   const [eventsByDate, setEventsByDate] = useState({});
-  
-  // Drag and drop state
-  const [isDragging, setIsDragging] = useState(false);
-  const [draggedEvent, setDraggedEvent] = useState(null);
-  const [draggedFromDate, setDraggedFromDate] = useState(null);
+
+  // Drag and drop state - using the same pattern as CalendarView
+  const [draggingEvent, setDraggingEvent] = useState(null);
+  const [draggingPosition] = useState(new Animated.ValueXY({ x: 0, y: 0 }));
+  const dayLayouts = useRef({});
 
   const authManager = AuthManager.getInstance();
 
@@ -54,7 +56,7 @@ const HomeScreen = (props) => {
       if (!isRefreshing) {
         setEventLoading(true);
       }
-      
+
       const fetchedEvents = await getEvents();
       console.log("Fetched events count:", fetchedEvents.length);
       setEvents(fetchedEvents);
@@ -178,13 +180,58 @@ const HomeScreen = (props) => {
     }, 50);
   };
 
+  // PanResponder for drag/drop - same as CalendarView
+  const panResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: () => !!draggingEvent,
+    onPanResponderMove: (_, gesture) => {
+      if (draggingEvent) {
+        draggingPosition.setValue({
+          x: gesture.moveX - 50,
+          y: gesture.moveY - 20,
+        });
+      }
+    },
+    onPanResponderRelease: (_, gesture) => {
+      if (!draggingEvent) return;
+
+      let dropDate = null;
+
+      for (const [date, layout] of Object.entries(dayLayouts.current)) {
+        if (
+          gesture.moveX >= layout.x &&
+          gesture.moveX <= layout.x + layout.width &&
+          gesture.moveY >= layout.y &&
+          gesture.moveY <= layout.y + layout.height
+        ) {
+          dropDate = date;
+          break;
+        }
+      }
+
+      if (dropDate && dropDate !== getEventDate(draggingEvent)) {
+        moveEventToDate(draggingEvent, dropDate);
+      }
+
+      setDraggingEvent(null);
+    },
+  });
+
+  // Helper function to get event date
+  const getEventDate = (event) => {
+    if (event.start?.dateTime) {
+      return event.start.dateTime.split('T')[0];
+    } else if (event.start?.date) {
+      return event.start.date;
+    }
+    return null;
+  };
+
   const onDayPress = (day) => {
-    if (isDragging) {
-      // Handle drop
-      handleDrop(day.dateString);
+    if (draggingEvent) {
+      // If we're in drag mode, don't navigate
       return;
     }
-    
+
     console.log('selected day', day);
     props.navigation.navigate("EventList", {
       date: day.dateString,
@@ -192,69 +239,28 @@ const HomeScreen = (props) => {
     });
   };
 
-  // Handle dropping event on a date
-  const handleDrop = (targetDate) => {
-    if (!draggedEvent || !draggedFromDate) return;
-
-    if (targetDate === draggedFromDate) {
-      // Dropped on same date, cancel
-      resetDragState();
-      return;
-    }
-
-    const targetDateFormatted = new Date(targetDate).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-
-    Alert.alert(
-      'Move Event',
-      `Move "${draggedEvent.summary}" to ${targetDateFormatted}?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: resetDragState,
-        },
-        {
-          text: 'Move',
-          onPress: () => moveEventToDate(draggedEvent, targetDate),
-        },
-      ]
-    );
-  };
-
-  // Reset drag state
-  const resetDragState = () => {
-    setIsDragging(false);
-    setDraggedEvent(null);
-    setDraggedFromDate(null);
-  };
-
-  // Function to handle event move
+  // Function to handle event move - updated to work with the new drag system
   const moveEventToDate = async (event, newDate) => {
     try {
       setEventLoading(true);
-      resetDragState();
-      
+
       let updatedEventData = {};
-      
+
       if (event.start?.dateTime) {
         // For timed events, keep the same time but change the date
         const originalDateTime = new Date(event.start.dateTime);
         const hours = originalDateTime.getHours();
         const minutes = originalDateTime.getMinutes();
         const seconds = originalDateTime.getSeconds();
-        
+
         const newDateTime = new Date(newDate);
         newDateTime.setHours(hours, minutes, seconds, 0);
-        
+
         updatedEventData.start = {
           dateTime: newDateTime.toISOString(),
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         };
-        
+
         if (event.end?.dateTime) {
           const originalEndDate = new Date(event.end.dateTime);
           const duration = originalEndDate.getTime() - originalDateTime.getTime();
@@ -280,23 +286,40 @@ const HomeScreen = (props) => {
 
       console.log('Updating event with data:', updatedEventData);
 
+      // Update the local state immediately for better UX
+      setEvents(prev =>
+        prev.map(ev =>
+          ev.id === event.id
+            ? { ...ev, start: updatedEventData.start, end: updatedEventData.end }
+            : ev
+        )
+      );
+
       // Call your Google Calendar API to update the event
       await updateEvent(event.id, updatedEventData);
-      
+
       // Refresh events after successful update
       await fetchEvents();
-      
-      Alert.alert('Success', `Event "${event.summary}" moved successfully!`);
+
+      const targetDateFormatted = new Date(newDate).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      Alert.alert('Success', `Event "${event.summary}" moved to ${targetDateFormatted}!`);
     } catch (error) {
       console.error('Error moving event:', error);
       Alert.alert('Error', 'Failed to move event. Please try again.');
+      // Refresh to restore original state on error
+      await fetchEvents();
     } finally {
       setEventLoading(false);
     }
   };
 
-  // Handle long press on event
-  const handleEventLongPress = (event, dateString) => {
+  // Handle long press on event - simplified to work with new system
+  const handleEventLongPress = (event, dateString, nativeEvent) => {
     // Check if event can be moved
     if (event.isHoliday || (event.calendarId && event.calendarId !== 'primary')) {
       Alert.alert('Cannot Move Event', 'Only your personal events can be moved.');
@@ -304,29 +327,45 @@ const HomeScreen = (props) => {
     }
 
     Vibration.vibrate(100); // Haptic feedback
-    setIsDragging(true);
-    setDraggedEvent(event);
-    setDraggedFromDate(dateString);
+    setDraggingEvent(event);
+
+    // Set initial position based on touch location
+    draggingPosition.setValue({
+      x: nativeEvent.pageX - 50,
+      y: nativeEvent.pageY - 20,
+    });
+
     console.log('Started dragging event:', event.summary);
   };
 
-  // Custom day component
+  // Custom day component - updated to work with drag system
   const DayComponent = ({ date, marking }) => {
     const dateString = date.dateString;
     const dayEvents = eventsByDate[dateString] || [];
     const isToday = dateString === new Date().toISOString().split('T')[0];
     const hasEvents = dayEvents.length > 0;
-    const isDropZone = isDragging && dateString !== draggedFromDate;
-    const isDragSource = isDragging && dateString === draggedFromDate;
+    const isDragging = !!draggingEvent;
+    const isDropZone = isDragging && dateString !== getEventDate(draggingEvent);
 
     return (
-      <Pressable 
+      <Pressable
         onPress={() => onDayPress(date)}
         style={[
           styles.dayContainer,
           isDropZone && styles.dropZone,
-          isDragSource && styles.dragSource
         ]}
+        ref={(ref) => {
+          if (ref) {
+            ref?.measureInWindow((x, y, width, height) => {
+              dayLayouts.current[dateString] = {
+                x,
+                y,
+                width,
+                height,
+              };
+            });
+          }
+        }}
       >
         <View style={[
           styles.dayHeader,
@@ -344,18 +383,18 @@ const HomeScreen = (props) => {
           <View style={styles.eventContainer}>
             {dayEvents.slice(0, 2).map((event, index) => {
               const canBeMoved = !event.isHoliday && (!event.calendarId || event.calendarId === 'primary');
-              const isDraggedEvent = isDragging && draggedEvent?.id === event.id;
-              
+              const isDraggedEvent = isDragging && draggingEvent?.id === event.id;
+
               return (
                 <Pressable
                   key={event.id}
-                  onLongPress={() => handleEventLongPress(event, dateString)}
+                  onLongPress={(e) => handleEventLongPress(event, dateString, e.nativeEvent)}
                   delayLongPress={200}
                   style={[
                     styles.eventBox,
-                    { 
+                    {
                       backgroundColor: isToday ? '#1976D2' : '#2E7D32',
-                      opacity: isDraggedEvent ? 0.5 : (canBeMoved ? 1 : 0.7),
+                      opacity: isDraggedEvent ? 0.3 : (canBeMoved ? 1 : 0.7),
                       borderWidth: isDraggedEvent ? 2 : 0,
                       borderColor: isDraggedEvent ? '#FF6B35' : 'transparent',
                     }
@@ -412,7 +451,7 @@ const HomeScreen = (props) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panResponder.panHandlers}>
       <ScrollView
         style={styles.scrollContainer}
         refreshControl={
@@ -425,10 +464,10 @@ const HomeScreen = (props) => {
           />
         }
         contentContainerStyle={styles.scrollContent}
-        scrollEnabled={!isDragging}
+        scrollEnabled={!draggingEvent}
       >
         <Header nav={props.navigation} />
-        
+
         {/* Only show ProgressBarAndroid when NOT refreshing */}
         {!refreshing && (
           <ProgressBarAndroid
@@ -439,14 +478,14 @@ const HomeScreen = (props) => {
           />
         )}
 
-        {isDragging && (
+        {draggingEvent && (
           <View style={styles.dragNotification}>
             <Text style={styles.dragNotificationText}>
-              Moving "{draggedEvent?.summary}" - Tap any date to drop
+              Moving "{draggingEvent?.summary}" - Drop on any date to move
             </Text>
-            <Pressable 
+            <Pressable
               style={styles.cancelButton}
-              onPress={resetDragState}
+              onPress={() => setDraggingEvent(null)}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </Pressable>
@@ -484,7 +523,7 @@ const HomeScreen = (props) => {
               borderBottomWidth: 0,
             }}
             style={styles.calendar}
-            enableSwipeMonths={!isDragging}
+            enableSwipeMonths={!draggingEvent}
             hideExtraDays={true}
             firstDay={1}
           />
@@ -500,7 +539,7 @@ const HomeScreen = (props) => {
             <View style={[styles.legendDot, { backgroundColor: '#2E7D32' }]} />
             <Text style={styles.legendText}>Other Events</Text>
           </View>
-          {!isDragging && (
+          {!draggingEvent && (
             <View style={styles.legendItem}>
               <Text style={styles.legendHint}>Long press events to move them</Text>
             </View>
@@ -521,6 +560,23 @@ const HomeScreen = (props) => {
           <Text style={styles.statLabel}>Today's Events</Text>
         </View>
       </View>
+
+      {/* Floating dragged event - same as CalendarView */}
+      {draggingEvent && (
+        <Animated.View
+          style={[
+            styles.floatingEvent,
+            {
+              transform: [
+                { translateX: draggingPosition.x },
+                { translateY: draggingPosition.y },
+              ],
+            },
+          ]}
+        >
+          <Text style={styles.floatingEventText}>{draggingEvent.summary}</Text>
+        </Animated.View>
+      )}
 
       <TokenExpiredModal
         visible={showTokenExpiredModal}
@@ -599,11 +655,6 @@ const styles = StyleSheet.create({
     borderColor: '#FF6B35',
     borderStyle: 'dashed',
   },
-  dragSource: {
-    backgroundColor: 'rgba(66, 133, 244, 0.2)',
-    borderWidth: 1,
-    borderColor: '#4285F4',
-  },
   dayHeader: {
     width: '100%',
     alignItems: 'center',
@@ -669,6 +720,26 @@ const styles = StyleSheet.create({
   dropIndicatorText: {
     fontSize: 6,
     color: '#ffffff',
+    fontFamily: 'Lato-Bold',
+  },
+  // Floating event styles (same as CalendarView)
+  floatingEvent: {
+    position: 'absolute',
+    backgroundColor: '#333',
+    padding: 8,
+    borderRadius: 6,
+    zIndex: 1000,
+    borderWidth: 2,
+    borderColor: '#FF6B35',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 10,
+  },
+  floatingEventText: {
+    color: '#ffffff',
+    fontSize: 12,
     fontFamily: 'Lato-Bold',
   },
   legendContainer: {
