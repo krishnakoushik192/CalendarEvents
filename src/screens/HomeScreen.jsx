@@ -36,7 +36,6 @@ const HomeScreen = (props) => {
   const [isDragging, setIsDragging] = useState(false);
   const [draggedEvent, setDraggedEvent] = useState(null);
   const [draggedFromDate, setDraggedFromDate] = useState(null);
-  const [dropZoneDate, setDropZoneDate] = useState(null);
 
   const authManager = AuthManager.getInstance();
 
@@ -226,7 +225,6 @@ const HomeScreen = (props) => {
     setIsDragging(false);
     setDraggedEvent(null);
     setDraggedFromDate(null);
-    setDropZoneDate(null);
   };
 
   // Function to handle event move
