@@ -148,7 +148,7 @@ const EventModal = ({ visible, type, event, date, onClose, onEventUpdated }) => 
     const generateTimeOptions = () => {
         const times = [];
         for (let hour = 0; hour < 24; hour++) {
-            for (let minute = 0; minute < 60; minute += 60) { // Changed to 60-minute intervals for better UX
+            for (let minute = 0; minute < 60; minute += 30) { // Changed to 30-minute intervals for better UX
                 const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
                 const displayTime = new Date(`2000-01-01T${timeString}`).toLocaleTimeString('en-US', {
                     hour: 'numeric',

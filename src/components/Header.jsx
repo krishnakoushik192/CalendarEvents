@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, Image, Pressable, Dimensions } from 'react-nati
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UserProfileModal from './UserDetails';
 import LinearGradient from 'react-native-linear-gradient';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const { width, height } = Dimensions.get('window');
 
@@ -25,6 +26,7 @@ const Header = ({nav}) => {
     }, []);
 
     const handleLogout = async () => {
+        await GoogleSignin.signOut();
         await AsyncStorage.removeItem('token');
         await AsyncStorage.removeItem('user');
         nav.navigate('Login');
