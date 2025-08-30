@@ -9,8 +9,6 @@ import {
   ScrollView, 
   ProgressBarAndroid, 
   Pressable,
-  PanResponder,
-  Animated,
   Vibration
 } from 'react-native';
 import Header from '../components/Header';
@@ -50,9 +48,13 @@ const HomeScreen = (props) => {
     };
   }, []);
 
-  const fetchEvents = async () => {
+  const fetchEvents = async (isRefreshing = false) => {
     try {
-      setEventLoading(true);
+      // Only set eventLoading if not refreshing (to avoid double loaders)
+      if (!isRefreshing) {
+        setEventLoading(true);
+      }
+      
       const fetchedEvents = await getEvents();
       console.log("Fetched events count:", fetchedEvents.length);
       setEvents(fetchedEvents);
@@ -85,13 +87,16 @@ const HomeScreen = (props) => {
         Alert.alert('Error', 'Failed to fetch events');
       }
     } finally {
-      setEventLoading(false);
+      // Only clear eventLoading if not refreshing
+      if (!isRefreshing) {
+        setEventLoading(false);
+      }
     }
   };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchEvents();
+    await fetchEvents(true); // Pass true to indicate this is a refresh
     setRefreshing(false);
   }, []);
 
@@ -423,12 +428,16 @@ const HomeScreen = (props) => {
         scrollEnabled={!isDragging}
       >
         <Header nav={props.navigation} />
-        <ProgressBarAndroid
-          styleAttr="Horizontal"
-          indeterminate={eventLoading}
-          color="#4285F4"
-          style={{ width: '100%', height: 20 }}
-        />
+        
+        {/* Only show ProgressBarAndroid when NOT refreshing */}
+        {!refreshing && (
+          <ProgressBarAndroid
+            styleAttr="Horizontal"
+            indeterminate={eventLoading}
+            color="#4285F4"
+            style={{ width: '100%', height: 20 }}
+          />
+        )}
 
         {isDragging && (
           <View style={styles.dragNotification}>
